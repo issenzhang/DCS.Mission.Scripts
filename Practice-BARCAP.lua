@@ -1,27 +1,21 @@
--- CAP 多人练习 by ISSEN
+-- BARCAP 多人练习 by ISSEN
 
--- 你和你的小伙伴们将从______机场起飞, 在1号航路点完成集结后, 在2-3号航路点之间建立巡逻航线.
--- 建立巡逻航线后, 请通过F10激活训练.
-
--- 激活训练前, 可通过F10菜单, 调整训练难度(敌机机型).
-
--- 每批次会根据巡逻区域人数, 生成对应人数的敌机.
--- 击毁全部敌机后, 你机队将有120s重新整理编队.
--- 一共会生成4波敌机, 难度逐渐增大.
-
--- 祝好运
-
--- 4波次 敌机挑战
--- 2人机组
-
--- 预警机:251.000
--- 加油机:252.000-1X 硬管 / 253.000-2X软管
-
--- 5波次完成后, 每次都直接进入挑战关卡
--- 波次完成后, 有2分钟整理编队的时间
--- 失败条件:
---  1. 战损以上本方飞机50%
---  2. 所有己方飞机飞离任务区60s
+--你和你的小伙伴们将从艾尔明翰空军基地起飞, 在1号航路点完成集结后, 在2-3号航路点之间建立巡逻航线.
+--建立巡逻航线后, 请通过F10激活训练.
+--
+--激活训练前, 可通过F10菜单, 调整训练难度(敌机机型).
+--
+--每批次会根据巡逻区域人数, 生成对应人数的敌机.
+--击毁全部敌机后, 你机队将有120s重新整理编队.
+--一共会生成4波敌机, 难度逐渐增大.
+--
+--预警机:251.000
+--
+--4波次完成后, 每次都直接进入挑战关卡
+--波次完成后, 有2分钟整理编队的时间
+--失败条件:
+-- 1. 战损以上本方飞机50%
+-- 2. 所有己方飞机飞离任务区60s
 
 -- easy难度
 --  1. 2* mig-21    (2*73)
@@ -41,9 +35,9 @@
 --  3. 2* mig-35    (2*R37+...)
 --  4. 2* f-14      (4*不死鸟+2*9xx)
 
-DURATION_WAVE_INTERVAL = 120    -- 波次之间的时间间隔(s)
-MAX_LOST_RATE = 0.5             -- 判定任务失败的战损比例
-ZONE_PRACTICE = "zone-practice" -- 练习的交战区域
+DURATION_WAVE_INTERVAL = 120 -- 波次之间的时间间隔(s)
+MAX_LOST_RATE = 0.5          -- 判定任务失败的战损比例
+ZONE_PRACTICE = "z-practice" -- 练习的交战区域
 
 _SETTINGS:SetPlayerMenuOff()
 
@@ -55,13 +49,15 @@ end
 
 local function MessageToAll(msg_text, duration)
     MESSAGE:New(msg_text, duration or 60):ToAll()
+
+    USERSOUND:New("radio click.ogg"):ToAll()
 end
 
 local wave = 1
 local spawn_times = 1
 local difficult = 2 --默认中等难度
 
-local status = 0
+local status = 1
 local table_status =
 {
     "未启动/停止",
@@ -81,11 +77,11 @@ local table_enemy =
     { --normal
         "g-mig-29",
         "g-su-27",
-        "g-j-11b",
+        "gj-11-b",
         "g-f-15c"
     },
     { --hard
-        "g-f-16",
+        "gj-11-b",
         "g-f-15c",
         "g-mig-35",
         "g-f-14"
@@ -114,26 +110,26 @@ local function wave_instep()
     end
 end
 
-function start_wave()
+local function start_wave()
     local now_wave = wave
     spawn_times = UTILS.Round(#(set_client:GetSetObjects() + 1) * 0.5)
     for i = 1, spawn_times do
-        local sp = SPAWN:NewWithAlias(table_enemy[diffcult][i], "enemy-" .. i)
+        local sp = SPAWN:NewWithAlias(table_enemy[difficult][i], "enemy-" .. i)
             :InitAIOn()
-            :SpawnInZone("z-spawn", true, 6000, 12000)
+            :SpawnInZone("z-spawn", true)
     end
     MessageToAll("第" .. wave .. "波敌人已刷新：\n" ..
         table_describe_enemy[wave] .. " 共" .. spawn_times .. "组")
     status = 2
 end
 
-function info_idle_last_time(last_tick)
+local function info_idle_last_time(last_tick)
     if tick_idle == last_tick then
         MessageToAll(tick_idle .. "s后激活敌机")
     end
 end
 
-function do_idle()
+local function do_idle()
     if tick_idle > 0 then
         tick_idle = tick_idle - 1
     end
@@ -146,7 +142,7 @@ function do_idle()
     info_idle_last_time(1)
 end
 
-function control_practice()
+local function control_practice()
     -- 检查区域内人数
     if status ~= 1 then
         if SET_CLIENT:New():FilterCategories("plane"):FilterZones(ZONE_PRACTICE):FilterOnce():CountAlive() <= 0.5 * init_players_count then
@@ -175,7 +171,7 @@ function control_practice()
     end
 end
 
-function stop_practice(_reason)
+local function stop_practice(_reason)
     status = 1
 
     if _reason ~= nil then
@@ -189,17 +185,14 @@ function stop_practice(_reason)
     end
 
     -- 销毁所有红方训练组的飞机
-    local timer_destroy = TIMER:New
-        (
-            function()
-                local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit
-                    (
-                        function(u)
-                            u:Destroy(false)
-                        end
-                    )
-            end
-        ):Start(30)
+    local timer_destroy = TIMER:New(
+        function()
+            local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit(
+                function(u)
+                    u:Destroy(false)
+                end
+            )
+        end):Start(30)
 end
 
 local function start_practice()
@@ -214,7 +207,7 @@ local function start_practice()
             timer_practice = TIMER:NEW(control_practice):Start(0, 1)
         end
     else
-        MessageToAll("训练正在进行中...")
+        MessageToAll("训练正在进行中... " .. status)
     end
 end
 
@@ -239,5 +232,27 @@ local Menu_Level_Set_1 = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "简单
 local Menu_Level_Set_2 = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "正常", Menu_Level, set_difficult, 2)
 local Menu_Level_Set_3 = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "困难", Menu_Level, set_difficult, 3)
 
+
 -- mission start
 MESSAGE:New("================\n\nMission Start! \n\n================", 10, "", true):ToAll()
+
+local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "作弊:摧毁所有敌机", nil,
+    function()
+        local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit(
+            function(u)
+                u:Destroy(false)
+            end
+        )
+    end
+)
+
+local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "调试:刷新出4组随机敌机", nil,
+    function()
+        for i = 1, 4 do
+            local sp = SPAWN:NewWithAlias(table_enemy[math.random(1, 3)][i], "enemy-" .. i)
+                :InitAIOn()
+                :SpawnInZone(ZONE:New("z-spawn"), true)
+        end
+    end
+)
+
