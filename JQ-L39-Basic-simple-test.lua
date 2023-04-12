@@ -831,6 +831,6 @@ TIMER:New(function()
     --MESSAGE:New(l:GetReport(), 100):ToAll()
 end):Start(2, 1, 1)
 
-TIMER:New(function()    
-    MESSAGE:New(l:ToStringData(), 1):Clear():ToAll()
+TIMER:New(function()
+    MESSAGE:New(l:ToStringData(), 1):ToAll()
 end):Start(3, 1)

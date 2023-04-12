@@ -90,18 +90,34 @@ local table_enemy =
 
 local table_describe_enemy =
 {
-    "米格-21 双机编队",
-    "米格-29 双机编队",
-    "苏-27 双机编队",
-    "F/A-14 双机编队"
+    { --easy
+        "mig-21",
+        "mig-29",
+        "jf-17",
+        "su-27",
+
+    },
+    { --normal
+        "mig-29",
+        "su-27",
+        "j-11-b",
+        "f-15c"
+    },
+    { --hard
+        "j-11-b",
+        "f-15c",
+        "mig-35",
+        "f-14"
+    }
 }
 
 
+local set_client_inzone = SET_CLIENT:New():FilterCategories("plane"):FilterZones({ ZONE:New(ZONE_PRACTICE) }):FilterStart()
 local set_client = SET_CLIENT:New():FilterCategories("plane"):FilterStart()
-local set_enemy = SET_UNIT:New():FilterCoalitions("red"):FilterCategories("plane"):FilterStart()
+local set_enemy = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart()
 local init_players_count = 0
 local timer_practice = nil
-local tick_idle = 0
+local tick_idle = DURATION_WAVE_INTERVAL
 
 local function wave_instep()
     wave = wave + 1
@@ -112,14 +128,14 @@ end
 
 local function start_wave()
     local now_wave = wave
-    spawn_times = UTILS.Round(#(set_client:GetSetObjects() + 1) * 0.5)
+    spawn_times = UTILS.Round((set_client:CountAlive() + 1) * 0.5, 0)
     for i = 1, spawn_times do
         local sp = SPAWN:NewWithAlias(table_enemy[difficult][i], "enemy-" .. i)
             :InitAIOn()
-            :SpawnInZone("z-spawn", true)
+            :SpawnInZone(ZONE:New("z-spawn"), true)
     end
     MessageToAll("第" .. wave .. "波敌人已刷新：\n" ..
-        table_describe_enemy[wave] .. " 共" .. spawn_times .. "组")
+        table_describe_enemy[difficult][wave] .. " 共" .. spawn_times .. "组")
     status = 2
 end
 
@@ -144,9 +160,9 @@ end
 
 local function control_practice()
     -- 检查区域内人数
-    if status ~= 1 then
-        if SET_CLIENT:New():FilterCategories("plane"):FilterZones(ZONE_PRACTICE):FilterOnce():CountAlive() <= 0.5 * init_players_count then
-            stop_practice("CAP区域内,己方飞机数量不足.")
+    if status ~= 1 then        
+        if set_client_inzone:CountAlive() <= 0.5 * init_players_count then
+            stop_practice("CAP区域内,己方飞机数量不足." .. sc:CountAlive())
         end
     end
 
@@ -159,15 +175,19 @@ local function control_practice()
                 MessageToAll("波次完成,120s后刷新下一波次.")
                 status = 3
                 wave_instep()
-                times_idle = DURATION_WAVE_INTERVAL
+                tick_idle = DURATION_WAVE_INTERVAL
             end
         end
     end
 
     -- 检查是否重新激活敌人
-    if status == 3 and tick_idle <= 0 then
-        status = 2
-        start_wave()
+    if status == 3 then
+        if tick_idle <= 0 then
+            status = 2
+            start_wave()
+        else
+            do_idle()
+        end
     end
 end
 
@@ -196,15 +216,17 @@ local function stop_practice(_reason)
 end
 
 local function start_practice()
-    if status == 1 then
-        if SET_CLIENT:New():FilterCategories("plane"):FilterZones(ZONE_PRACTICE):FilterOnce():CountAlive() <= 0.5 * init_players_count then
-            stop_practice("CAP区域内,己方飞机数量不足.训练未启动")
+    if status == 1 then       
+        if set_client_inzone:CountAlive() == 0 then
+            stop_practice("CAP区域内,己方飞机数量不足.训练未启动" ..
+                set_client_inzone:CountAlive() .. "~~" .. set_client:CountAlive())
         else
             wave = 1
             tick_idle = 0
             status = 3
 
-            timer_practice = TIMER:NEW(control_practice):Start(0, 1)
+            init_players_count = set_client_inzone:CountAlive()
+            timer_practice = TIMER:New(control_practice):Start(0, 1)
         end
     else
         MessageToAll("训练正在进行中... " .. status)
@@ -236,23 +258,35 @@ local Menu_Level_Set_3 = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "困难
 -- mission start
 MESSAGE:New("================\n\nMission Start! \n\n================", 10, "", true):ToAll()
 
-local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "作弊:摧毁所有敌机", nil,
-    function()
-        local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit(
-            function(u)
-                u:Destroy(false)
-            end
-        )
-    end
-)
+-- local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "作弊:摧毁所有敌机", nil,
+--     function()
+--         local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit(
+--             function(u)
+--                 u:Destroy(false)
+--             end
+--         )
+--     end
+-- )
 
-local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "调试:刷新出4组随机敌机", nil,
-    function()
-        for i = 1, 4 do
-            local sp = SPAWN:NewWithAlias(table_enemy[math.random(1, 3)][i], "enemy-" .. i)
-                :InitAIOn()
-                :SpawnInZone(ZONE:New("z-spawn"), true)
-        end
-    end
-)
+-- local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "调试:刷新出4组随机敌机", nil,
+--     function()
+--         for i = 1, 4 do
+--             local sp = SPAWN:NewWithAlias(table_enemy[math.random(1, 3)][i], "enemy-" .. i)
+--                 :InitAIOn()
+--                 :SpawnInZone(ZONE:New("z-spawn"), true)
+--         end
+--     end
+-- )
 
+-- local MenuDebug = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "显示调试信息", nil,
+--     function()
+--         MessageToAll("Status " .. status
+--             .. "\n" ..
+--             "Idle Tick " .. tick_idle
+--             .. "\n" ..
+--             "Init Player " .. init_players_count
+--             .. "\n" ..
+--             "Current Player " .. set_client_inzone:CountAlive()            
+--         )
+--     end
+-- )

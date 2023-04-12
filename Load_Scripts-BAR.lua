@@ -3,8 +3,8 @@ local script_path = "C:/Users/Issen/Saved Games/DCS/Missions/Mission-Scripts/"
 local script_list =
 {
     -- Load order must be correct
-    "Moose.lua",
-    "JQ-F18-Night-2.lua",
+    "Moose.lua",    
+    "Practice-BARCAP.lua",
 }
 
 local function load_scripts(path, list)
