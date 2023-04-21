@@ -1,22 +1,9 @@
--- by ISSEN / issen.gamming@outlook.com
+-- by ISSEN / issen.zhang@outlook.com
+-- 基于扣分制的评分脚本
 
 function append_string(string, append)
     return string + append + "\n"
 end
-
-Table_Pattern_CN = {
-    "1-未分类",
-    "2-滑行",
-    "3-滑跑",
-    "4-一边(爬升)",
-    "5-一转三",
-    "6-三边",
-    "7-着陆准备",
-    "8-四边",
-    "9-五边(进近)",
-    "10-着陆",
-    "11-滑回",
-    "12-结束" }
 
 Penalty =
 {
@@ -41,9 +28,7 @@ end
 function Penalty:ToString()
     local text = ""
     if self.point < 35 then
-        text = "[" .. Table_Pattern_CN[self.pattern] .. "]- " .. self.reason .. ".. 扣分-" .. self.point
-    else
-        text = "[" .. Table_Pattern_CN[self.pattern] .. "]- " .. self.reason .. ".. 直接不及格"
+        text = self.reason .. ".. 扣分-" .. self.point
     end
     return text
 end
@@ -67,14 +52,14 @@ end
 
 TrainSystem =
 {
-    _debug_mode           = false,
+    _debug_mode           = true,
     _unit                 = nil,
     _client               = nil,
 
     current_pattern       = 1, --当前飞行流程
     table_pattern         = {},
 
-    full_score            = 0,
+    full_score            = 35,
     pass_score            = 28,
     penalties             = {},
 
@@ -90,14 +75,47 @@ TrainSystem =
 }
 
 function TrainSystem:New(_unit_name)
-    local obj = {}
-    setmetatable(obj, self)
-    self.__index = self
+    local self = BASE:Inherit(self, BASE:New())
 
     self._unit = UNIT:FindByName(_unit_name)
     self._client = self._unit:GetClient()
 
-    return obj
+    return self
+end
+
+function TrainSystem:MessageToUnit(msg, duration)
+    local m = MESSAGE:New(msg, duration)
+    if debug == true then
+        m:ToAll()
+    else
+        if self._unit ~= nil then
+            m:ToUnit()
+        end
+        return self
+    end
+end
+
+function TrainSystem:MessageToAll(_msg, _dur, _isSound, _isClear)
+    local msg = string.format("%s", _msg) or ""
+    local dur = _dur or 30
+    local isSound = _isSound or false
+    local isClear = _isClear or false
+
+    local m = MESSAGE:New(msg, dur)
+    if isClear == true
+    then
+        m:Clear():ToAll()
+    else
+        m:ToAll()
+    end
+    if isSound then
+        USERSOUND:New("radio click.ogg"):ToAll()
+    end
+end
+
+function TrainSystem:InitPatternTable(_table)
+    self.table_pattern = _table
+    return self
 end
 
 function TrainSystem:FindPenaltyIndex(_penalty)
@@ -110,12 +128,16 @@ function TrainSystem:FindPenaltyIndex(_penalty)
     return index
 end
 
-function TrainSystem:AddPenalty(_penalty)    
-    local index = self:FindPenaltyIndex(_penalty) or 0    
+function TrainSystem:PenaltyToString(_penalty)
+    return self:GetCurrentPattern() .. " - " .. _penalty:ToString()
+end
+
+function TrainSystem:AddPenalty(_penalty)
+    local index = self:FindPenaltyIndex(_penalty) or 0
     if index == 0 then
-        if (_penalty.point or 0) > 0 then            
-            MESSAGE:New("扣分啦：" .. _penalty:ToString(), 30):ToAll()
-            table.insert(self.penalties, _penalty)
+        if (_penalty.point or 0) > 0 then
+            self:MessageToAll("扣分啦：" .. self:PenaltyToString(_penalty), 30)
+            table.insert(self.penalties, #self.penalties + 1, _penalty)
         end
     else
         self.penalties[index] = self.penalties[index]:Instead(_penalty)
@@ -225,7 +247,7 @@ function TrainSystem:ToStringData()
     if self._client ~= nil then
         append_string(_msg, "ClientName: " .. self._client:GetName())
     end
-    _msg = append_string(_msg, "Current Pattern: " .. Table_Pattern_CN[self.current_pattern])
+    _msg = append_string(_msg, "Current Pattern: " .. self:GetCurrentPattern())
 
     local is_air = ""
     if self._unit:InAir() == true then
@@ -247,8 +269,10 @@ function TrainSystem:ToStringData()
     _msg = append_string(_msg, "Pitch: " .. self:GetPitch() .. " degree")
     _msg = append_string(_msg, "Heading: " .. self:GetHeading() .. " degree")
 
+    _msg = append_string(_msg, "#Penalties: " .. #self.penalties)
+
     if #self.penalties >= 1 then
-        _msg = append_string(_msg, "Last Penalty:\n" .. self.penalties[#self.penalties]:ToString())
+        _msg = append_string(_msg, "Last Penalty:\n" .. self:PenaltyToString(self.penalties[#self.penalties]))
     else
         _msg = append_string(_msg, "No Penalty yet.")
     end
@@ -256,14 +280,16 @@ function TrainSystem:ToStringData()
     return _msg
 end
 
-function TrainSystem:MessageToUnit(msg, duration)
-    local m = MESSAGE:New(msg, duration)
-    if debug == true then
-        m:ToAll()
+function TrainSystem:SetDebugMode(debug_mode)
+    self._debug_mode = debug_mode
+    return self
+end
+
+function TrainSystem:ToggleDebugMode()
+    if self._debug_mode == true then
+        self._debug_mode = false
     else
-        if self._unit ~= nil then
-            m:ToUnit()
-        end
-        return self
+        self._debug_mode = true
     end
+    return self
 end

@@ -1,4 +1,4 @@
-local script_path = "C:/Users/Issen/Saved Games/DCS/Missions/DCS-Scripts/"
+local script_path = "C:/Users/Issen/Saved Games/DCS/Missions/Mission-Scripts/"
 
 local script_list =
 {

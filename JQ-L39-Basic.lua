@@ -1,5 +1,20 @@
 -- by ISSEN / issen.gamming@outlook.com
 
+Table_Pattern_CN = {
+    "1-未分类",
+    "2-滑行",
+    "3-滑跑",
+    "4-一边(爬升)",
+    "5-一转三",
+    "6-三边",
+    "7-着陆准备",
+    "8-四边",
+    "9-五边(进近)",
+    "10-着陆",
+    "11-滑回",
+    "12-结束" }
+
+
 function append_string(string, append)
     return string .. append .. "\n"
 end
@@ -13,25 +28,11 @@ L39 =
 }
 
 function L39:New(_unit_name)
-    local self         = BASE:Inherit(self, TrainSystem:New(_unit_name))
+    local self      = BASE:Inherit(self, TrainSystem:New(_unit_name))
+    self.full_score = 35
+    self.pass_score = 28
 
-    self.table_pattern =
-    {
-        "1-未分类",
-        "2-滑行",
-        "3-滑跑",
-        "4-一边(爬升)",
-        "5-一转三",
-        "6-三边",
-        "7-着陆准备",
-        "8-四边",
-        "9-五边(进近)",
-        "10-着陆",
-        "11-滑回",
-        "12-结束"
-
-    }
-    self.full_score    = 35
+    self:InitPatternTable(Table_Pattern_CN)
     return self
 end
 
@@ -314,7 +315,7 @@ function L39:CheckPattern_AfterLanding()
 end
 
 function L39:CheckPattern_TaxiBack()
-    local ground_speed = self._unit:GetVelocityKMH() 
+    local ground_speed = self._unit:GetVelocityKMH()
     local MAX_GROUND_SPEED = 60
 
     if ground_speed >= MAX_GROUND_SPEED * 0.5 then
@@ -346,7 +347,7 @@ function L39:ControlStatus_Taxi()
     self:CheckPattern_Taxi()
 
     local ground_speed = self._unit:GetVelocityKMH()
-    if self:IsInZone("z-pre-takeoff") and ground_speed < 10 then
+    if self:IsInZone("z-pre-takeoff") and ground_speed < 3 then
         self.current_pattern = 3
         return true
     end
@@ -473,7 +474,29 @@ function L39:ControlStatus_TaxiBack()
     return false
 end
 
+function L39:ShowDebugData()
+    if self._debug_mode == true then
+        local msg = self:ToStringData()
+        MESSAGE:New(msg, 1):Clear():ToAll()
+    end
+    return self
+end
+
+function L39:CheckTrainning()
+    if self.current_pattern >= 2 and self.current_pattern <= 11 then
+        return true
+    else
+        return false
+    end
+end
+
 function L39:CallStatus()
+    -- if self._debug_mode == true then
+    --     self:ShowDebugData()
+    -- end
+
+    self:ShowDebugData()
+
     if self.current_pattern == 2 then
         self:ControlStatus_Taxi()
     elseif self.current_pattern == 3 then
@@ -502,64 +525,56 @@ function L39:CallStatus()
         self:CheckPattern_Climb()
     end
 
-    self:ShowDebugData()
     return self
-end
-
-function L39:SetDebugMode(debug_mode)
-    self._debug_mode = debug_mode
-    return self
-end
-
-function L39:ToggleDebugMode()
-    if self._debug_mode == true then
-        self._debug_mode = false
-    else
-        self._debug_mode = true
-    end
-    return self
-end
-
-function L39:ShowDebugData()
-    if self._debug_mode == true then
-        local msg = self:ToStringData()
-        MESSAGE:New(msg, 1):ToAll(self._client)
-    end
-    return self
-end
-
-function L39:CheckTrainning()
-    if self.current_pattern >= 2 and self.current_pattern <= 11 then
-        return true
-    else
-        return false
-    end
 end
 
 function L39:TrainStart()
     local msg = ""
-    msg:append(self._client " .. 开始五边模拟考核,祝次次压中线")
-    MESSAGE:New(msg, 30, nil, true):ToClient(self._client)
-    self.current_pattern = 2
-    self.timer_train = TIMER:New(self.CallStatus):Start(0, self.main_timer_detla_time)
-    return self
+    if self.current_pattern == 1 or self.current_pattern == 12 then
+        msg = append_string(msg, self._unit:GetPlayerName() .. "开始五边模拟考核,祝次次压中线")
+        MESSAGE:New(msg, 30, nil, true):ToClient(self._client)
+        self.current_pattern = 2
+        self.timer_train = TIMER:New(self.CallStatus, self):Start(0, self.main_timer_detla_time)
+        self:SetDebugMode(true)
+        return self
+    else
+        msg = append_string(msg, self._client.Name() " .. 已经在考试阶段中(状态:" ..
+            self:GetCurrentPattern() .. ")")
+        return self
+    end
 end
 
 function L39:TrainStop()
     self.timer_train:Stop()
     local msg = ""
-    msg:append(self._client " .. 考核结束!")
-    msg:append(self:GetReport())
+    msg = append_string(msg, self._client .. "考核结束!")
+    msg = append_string(msg, self:GetReport())
     self.timer_train:Stop()
     MESSAGE:New(msg, 60, nil, true):ToAll()
 end
 
-local l = L39:New("test-1")
+local set_clients = SET_CLIENT:New():FilterActive():FilterCategories("plane"):FilterStart()
+local set_inTraining = SET_CLIENT:New()
 
-TIMER:New(function()
+function init_test(client)
+    if set_inTraining:IsNotInSet(client) then
+        set_inTraining:AddClientsByName(client:GetName())
+        local l39 = L39:New(client:GetName())
+        l39:TrainStart()
+    end
+end
 
-end):Start(2, 1, 0)
+-- local timer_mission = TIMER:New(
+--     function()
+--         set_clients:ForEachClientInZone(ZONE:New("z-init"), init_test)
+--     end):Start(0, 1)
 
-TIMER:New(function()
-    MESSAGE:New(l:ToStringData(), 1):ToAll()
-end):Start(3, 1)
+local timer_mission = TIMER:New(
+    function()
+        local clients = set_clients:GetSetObjects()
+        for _, v in ipairs(clients) do
+            if v:IsInZone(ZONE:New("z-init")) == true then
+                init_test(v)
+            end
+        end
+    end):Start(0, 1)

@@ -1,7 +1,7 @@
--- BARCAP 多人练习 by ISSEN
+-- SWEEP 多人练习 by ISSEN
 
 --你和你的小伙伴们将从艾尔明翰空军基地起飞, 在1号航路点完成集结后, 在2-3号航路点之间建立巡逻航线.
---建立巡逻航线后, 请通过F10激活训练.
+--建立巡逻航线后, 请通过F10激活训练, 你们需要清除所有升空的敌方战斗机.
 --
 --激活训练前, 可通过F10菜单, 调整训练难度(敌机机型).
 --
@@ -160,17 +160,17 @@ end
 
 local function control_practice()
     -- 检查区域内人数
-    if status ~= 1 then
-        if set_client_inzone:CountAlive() <= 0.5 * init_players_count then
-            stop_practice("CAP区域内,己方飞机数量不足." .. sc:CountAlive())
-        end
-    end
+    -- if status ~= 1 then
+    --     if set_client_inzone:CountAlive() <= 0.5 * init_players_count then
+    --         stop_practice("CAP区域内,己方飞机数量不足." .. sc:CountAlive())
+    --     end
+    -- end
 
     -- 检查是否进入idle
     if status == 2 then
         if set_enemy:CountAlive() <= 0 then
             if wave == 4 then
-                stop_practice("训练完成!")
+                stop_practice("完成所有波次,恭喜!")
             else
                 MessageToAll("波次完成,120s后刷新下一波次.")
                 status = 3
@@ -195,7 +195,7 @@ local function stop_practice(_reason)
     status = 1
 
     if _reason ~= nil then
-        MessageToAll("训练终止:" .. _reason)
+        MessageToAll("训练结束:" .. _reason)
     else
         MessageToAll("训练结束.")
     end
@@ -216,18 +216,14 @@ local function stop_practice(_reason)
 end
 
 local function start_practice()
-    if status == 1 then
-        if set_client_inzone:CountAlive() == 0 then
-            stop_practice("CAP区域内,己方飞机数量不足.训练未启动" ..
-                set_client_inzone:CountAlive() .. "~~" .. set_client:CountAlive())
-        else
-            wave = 1
-            tick_idle = 0
-            status = 3
+    if status == 1 or status == 0 then
+        wave = 1
 
-            init_players_count = set_client_inzone:CountAlive()
-            timer_practice = TIMER:New(control_practice):Start(0, 1)
-        end
+        tick_idle = 20
+        status = 3
+
+        init_players_count = set_client_inzone:CountAlive()
+        timer_practice = TIMER:New(control_practice):Start(0, 1)
     else
         MessageToAll("训练正在进行中... " .. status)
     end
@@ -257,36 +253,3 @@ local Menu_Level_Set_3 = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "困难
 
 -- mission start
 MESSAGE:New("================\n\nMission Start! \n\n================", 10, "", true):ToAll()
-
--- local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "作弊:摧毁所有敌机", nil,
---     function()
---         local su = SET_UNIT:New():FilterPrefixes("enemy"):FilterStart():ForEachUnit(
---             function(u)
---                 u:Destroy(false)
---             end
---         )
---     end
--- )
-
--- local MenuPractice_de = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "调试:刷新出4组随机敌机", nil,
---     function()
---         for i = 1, 4 do
---             local sp = SPAWN:NewWithAlias(table_enemy[math.random(1, 3)][i], "enemy-" .. i)
---                 :InitAIOn()
---                 :SpawnInZone(ZONE:New("z-spawn"), true)
---         end
---     end
--- )
-
--- local MenuDebug = MENU_COALITION_COMMAND:New(coalition.side.BLUE, "显示调试信息", nil,
---     function()
---         MessageToAll("Status " .. status
---             .. "\n" ..
---             "Idle Tick " .. tick_idle
---             .. "\n" ..
---             "Init Player " .. init_players_count
---             .. "\n" ..
---             "Current Player " .. set_client_inzone:CountAlive()
---         )
---     end
--- )
