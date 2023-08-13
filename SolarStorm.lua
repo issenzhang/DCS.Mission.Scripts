@@ -1,3 +1,5 @@
+HELPER = {}
+
 -- 具体参照ENUMS.ReportingName
 HELPER.ReportingName = -- 待继续补充
 {
@@ -125,218 +127,236 @@ function HELPER.GetReportingName(Unit)
     end
     if reportName == nil then
         Unit:T("HELPER: TypeName Not Found:" .. typeName)
-        return reportName
+
     end
+    return reportName
+end
 
-    -- 模拟太阳风暴以及其应对办法
-    -- wiki参考: @https://wiki.unitedearth.cc/
-    SOLAR_STORM = {
-        ClassName = "SOLAR_STORM"
-    }
+-- 模拟太阳风暴以及其应对办法
+-- wiki参考: @https://wiki.unitedearth.cc/
+SOLAR_STORM = {
+    ClassName = "SOLAR_STORM"
+}
 
-    SOLAR_STORM.TableFortress = {}
+SOLAR_STORM.TableFortress = {}
 
-    function SOLAR_STORM:New()
-        local self = BASE:Inherit(self, FSM:New())
+function SOLAR_STORM:New()
+    local self = BASE:Inherit(self, FSM:New())
 
-        -- 配置FSM信息
-        -- Start State.
-        self:SetStartState("Stopped")
+    -- 配置FSM信息
+    -- Start State.
+    self:SetStartState("Stopped")
 
-        -- Add FSM transitions.
-        -- From State --> Event --> To State
-        self:AddTransition("Stopped", "Start", "Happenning")
-        self:AddTransition("Happenning", "Stop", "Stopped")
+    -- Add FSM transitions.
+    -- From State --> Event --> To State
+    self:AddTransition("Stopped", "Start", "Happenning")
+    self:AddTransition("Happenning", "Stop", "Stopped")
 
-        self:AddTransition("*", "CheckStatus", "*")
-    end
+    self:AddTransition("*", "CheckStatus", "*")
+end
 
-    function SOLAR_STORM:AddShieldFotressByUnitNamePrefix(UnitNamePrefix)
-    end
+function SOLAR_STORM:AddShieldFotressByUnitNamePrefix(UnitNamePrefix)
+end
 
-    function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
-    end
+function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
+end
 
-    -- @field 堡垒单位
-    FORTRESS_UNIT = {
-        ClassName = "FORTRESS_UNIT"
-    }
+-- @field 堡垒单位
+FORTRESS_UNIT = {
+    ClassName = "FORTRESS_UNIT"
+}
 
-    FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
+FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
 
-    FORTRESS_UNIT.UnitTypeData = {
-        Hercules = {300, 300, 300}, -- C-130
-        Super_Hercules = {300, 300, 300}, -- SUPER C-130
-        Growler = {150, 150, 150}, -- EA-18G
-        Viking = {150, 150, 150}, -- S-3B
-        Hawkeye = {300, 300, 300}, -- E-2D
-        Sea_King = {150, 150, 150} -- S-61
-    }
+FORTRESS_UNIT.UnitTypeData = {
+    Hercules = {300, 300, 300}, -- C-130
+    Super_Hercules = {300, 300, 300}, -- SUPER C-130
+    Growler = {150, 150, 150}, -- EA-18G
+    Viking = {150, 150, 150}, -- S-3B
+    Hawkeye = {300, 300, 300}, -- E-2D
+    Sea_King = {150, 150, 150} -- S-61
+}
 
-    function FORTRESS_UNIT:New(FortressUnit)
-        local type = HELPER.GetReportingName(FortressUnit)
-        local fortressData = FORTRESS_UNIT.DefaultData
-        if type then
-            local data = FORTRESS_UNIT.UnitTypeData[type]
-            if data then
-                fortressData = data
-            end
-        end
-    end
-
-    -- @field 带有护盾的单位
-    SHIELD_UNIT = {
-        ClassName = "SHIELD_UNIT",
-
-        ShieldHealth = 0,
-        MaxShieldHealth = 0, -- 护盾上限值
-        BoomShieldHealth = 0, -- 护盾下限值(爆炸啦)
-        ShieldSpeedConsume = 1, -- 护盾消耗速率（/秒）
-        ShieldSpeedRecovery = 15, -- 护盾回复速率（/秒）
-
-        dTstatus = 1,
-        TimerExhaust = nil,
-        
-        Unit = nil
-    }
-
-    ----------------------
-    -- SHIELD Settings
-    ----------------------
-
-    SHIELD_UNIT.TimeInterval = 1 -- UNIT执行周期
-    SHIELD_UNIT.DefaultMessageDuration = 15 -- 一般信息的显示时长
-
-    SHIELD_UNIT.DefaultShieldHealth = 1200 -- 护盾能量值
-    SHIELD_UNIT.DefualBoomHealth = -600 -- 机体受损的护盾阈值
-    SHIELD_UNIT.DefaultSShieldSpeedConsume = 1 -- 护盾消耗速率（/秒）
-    SHIELD_UNIT.DefaultSShieldSpeedRecovery = 15 -- 护盾回复速率（/秒）
-
-    ------------------
-    -- 受损惩罚
-    ------------------
-    SHIELD_UNIT.ShieldExhaustExplodePower = 0.001 -- 护盾耗尽情况下的火光效果模拟
-    SHIELD_UNIT.DefaultBoomExplodePower = 0.15 -- 默认机体受损的爆炸当量
-
-    SHIELD_UNIT.UnitTypeExplodePower = -- 各机型的受损爆炸当量
-    {
-        Hornet = 0.15, -- F/A-18C:损坏部分飞控系统
-        RhinoE = 0.15,
-        RhinoF = 0.15,
-        Growler = 0.15,
-        Mudhen = 1.6, -- F-15E:损坏单发引擎
-        Viper = 0.7 -- F-16:损坏通讯天线
-    }
-
-    ----------------------
-    -- SHIELD Settings End
-    ----------------------
-
-    function SHIELD_UNIT:New(ShieldUnit)
-        local self = BASE:Inherit(self, FSM:New())
-        self:F(ShieldUnit)
-
-        self.Unit = ShieldUnit
-
-        -- 配置FSM信息
-        -- Start State.
-        self:SetStartState("Init")
-
-        -- Add FSM transitions.
-        -- From State --> Event --> To State
-        self:AddTransition("Init", "Start", "Stopped") -- 护盾被激活
-        self:AddTransition("Stopped", "ExitSafeZone", "Protecting") -- 护盾被激活
-        self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Stopped") -- 护盾被回复
-        self:AddTransition("Protecting", "Exhaust", "Damaging") -- 机体受损中
-        self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
-
-        self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
-
-        self:SetStatusUpdateTime(self.TimeInterval)
-    end
-
-    --- Set time interval for updating player status and other things.
-    -- @param #SHIELD_UNIT self
-    -- @param #number TimeInterval Time interval in seconds. Default 1 sec.
-    -- @return #SHIELD_UNIT self
-    function SHIELD_UNIT:SetStatusUpdateTime(TimeInterval)
-        self.dTstatus = TimeInterval or 1
-        return self
-    end
-
-    function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
-        if self.Unit.IsClient() then
-            self.Unit:MessageToClient(Message, Duration or self.DefaultMessageDuration, self.Unit:GetClient(), Name)
-        else
-            self.Unit:MessageToGroup(Message, Duration or self.DefaultMessageDuration, self.DefaultMessageDuration,
-                self.Unit:GetGroup(), Name)
-        end
-    end
-
-    -- 护盾耗尽
-    function SHIELD_UNIT:OnAfterExhaust(From, Event, To)
-        self:MessageNotify("警告:护盾已经耗尽.机体正在受损.")
-    end
-
-    function SHIELD_UNIT:OnEnterDamaging(From, Event, To)
-        self.TimerExhaust = TIMER:New(self.Unit:Explode(self.ShieldExhaustExplodePower)):Start(1, 1)
-    end
-
-    function SHIELD_UNIT:OnLeaveDamaging(From, Event, To)
-        self.TimerExhaust:Stop()
-    end
-
-    -- 摧毁或损坏受太阳风暴的单位
-    function SHIELD_UNIT:OnAfterBoom(From, Event, To)
-
-        local reportName = HELPER.GetReportingName(self.ShieldUnit)
-        local power = SHIELD_UNIT.DefaultExplodePower
-        if reportName then
-            power = SHIELD_UNIT.ExplodePowerExhaust[reportName]
-        end
-
-        self.Unit:Explode(power)
-    end
-
-    function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
-
-        -- 初始化
-        -- TODO: 补充初始化说明信息
-        if self:Is("Init") then
-            self:Start()
-        end
-
-        if self:Is("Stopped") then
-
-            -- 回复护盾值(如果护盾值小于零,则自动归零)
-            if self.ShieldHealth < 0 then
-                self.ShieldHealth = 0
-            end
-            if self.ShieldHealth < self.MaxShieldHealth then
-                self.ShieldHealth = self.ShieldHealth + self.ShieldSpeedRecovery * self.TimeInterval
-            else
-                self.ShieldHealth = self.MaxShieldHealth
-            end
-        end
-
-        if self:Is("Protecting") or self:Is("") then
-            -- 护盾值消耗
-            self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.TimeInterval
-
-            if self.ShieldHealth <= 0 then
-                self:Exhaust()
-            end
-
-            -- TODO: 添加护盾值消耗程度的报警
-        end
-
-        if self:Is("Damaging") then
-            -- 护盾值消耗
-            self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.TimeInterval
-
-            if self.ShieldHealth <= self.BoomShieldHealth then
-                self.Boom()
-            end
+function FORTRESS_UNIT:New(FortressUnit)
+    local type = HELPER.GetReportingName(FortressUnit)
+    local fortressData = FORTRESS_UNIT.DefaultData
+    if type then
+        local data = FORTRESS_UNIT.UnitTypeData[type]
+        if data then
+            fortressData = data
         end
     end
 end
+
+-- @field 带有护盾的单位
+SHIELD_UNIT = {
+    ClassName = "SHIELD_UNIT",
+
+    ShieldHealth = 0,
+    MaxShieldHealth = 0, -- 护盾上限值
+    BoomShieldHealth = 0, -- 护盾下限值(爆炸啦)
+    ShieldSpeedConsume = 1, -- 护盾消耗速率（/秒）
+    ShieldSpeedRecovery = 15, -- 护盾回复速率（/秒）
+
+    dTstatus = 1,
+    TimerExhaust = nil,
+
+    Unit = nil
+}
+
+----------------------
+-- SHIELD Settings
+----------------------
+
+SHIELD_UNIT.DefaultTimeInterval = 1 -- UNIT执行周期
+SHIELD_UNIT.DefaultMessageDuration = 15 -- 一般信息的显示时长
+
+SHIELD_UNIT.DefaultShieldHealth = 1200 -- 护盾能量值
+SHIELD_UNIT.DefualtBoomHealth = -600 -- 机体受损的护盾阈值
+SHIELD_UNIT.DefaultSShieldSpeedConsume = 1 -- 护盾消耗速率（/秒）
+SHIELD_UNIT.DefaultSShieldSpeedRecovery = 15 -- 护盾回复速率（/秒）
+
+------------------
+-- 受损惩罚
+------------------
+SHIELD_UNIT.ShieldExhaustExplodePower = 0.001 -- 护盾耗尽情况下的火光效果模拟
+SHIELD_UNIT.DefaultBoomExplodePower = 0.15 -- 默认机体受损的爆炸当量
+
+SHIELD_UNIT.UnitTypeExplodePower = -- 各机型的受损爆炸当量
+{
+    Hornet = 0.15, -- F/A-18C:损坏部分飞控系统
+    RhinoE = 0.15,
+    RhinoF = 0.15,
+    Growler = 0.15,
+    Mudhen = 1.6, -- F-15E:损坏单发引擎
+    Viper = 0.7 -- F-16:损坏通讯天线
+}
+
+----------------------
+-- SHIELD Settings End
+----------------------
+
+function SHIELD_UNIT:New(ShieldUnit)
+    local self = BASE:Inherit(self, FSM:New())
+    self:F(ShieldUnit)
+
+    self.Unit = ShieldUnit
+
+    self.BoomShieldHealth = SHIELD_UNIT.DefaultBoomExplodePower
+
+    -- 配置FSM信息
+    -- Start State.
+    self:SetStartState("Init")
+
+    -- Add FSM transitions.
+    -- From State --> Event --> To State
+    self:AddTransition("Init", "Start", "Stopped") -- 护盾被激活
+    self:AddTransition("Stopped", "ExitSafeZone", "Protecting") -- 护盾被激活
+    self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Stopped") -- 护盾被回复
+    self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中
+    self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
+
+    self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
+
+    self:SetStatusUpdateTime(SHIELD_UNIT.DefaultTimeInterval)
+
+       
+    self.StatusTimer = TIMER:New(function()
+        self:CheckStatus()
+    end):Start(1, self.dTstatus)
+
+    ------------------
+    -- end New Shield Unit
+    ------------------
+    return self
+end
+
+--- Set time interval for updating player status and other things.
+-- @param #SHIELD_UNIT self
+-- @param #number TimeInterval Time interval in seconds. Default 1 sec.
+-- @return #SHIELD_UNIT self
+function SHIELD_UNIT:SetStatusUpdateTime(TimeInterval)
+    self.dTstatus = TimeInterval or 1
+    return self
+end
+
+function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
+    if self.Unit:IsClient() then
+        self.Unit:MessageToClient(Message, Duration or self.DefaultMessageDuration, self.Unit:GetClient(), Name)
+    else
+        self.Unit:MessageToAll(Message, Duration or self.DefaultMessageDuration, Name)
+    end
+end
+
+-- 护盾耗尽
+function SHIELD_UNIT:OnAfterExhaust(From, Event, To)
+    self:MessageNotify("警告:护盾已经耗尽.机体正在受损.")
+end
+
+function SHIELD_UNIT:OnEnterDamaging(From, Event, To)
+    env.info("Debug: Entering Status Damaging")
+    self.TimerExhaust = TIMER:New(function()
+        self.Unit:Explode(self.ShieldExhaustExplodePower)
+    end):Start(1, 1)
+end
+
+function SHIELD_UNIT:OnLeaveDamaging(From, Event, To)
+    self.TimerExhaust:Stop()
+end
+
+-- 摧毁或损坏受太阳风暴的单位
+function SHIELD_UNIT:OnAfterBoom(From, Event, To)
+
+    local reportName = HELPER.GetReportingName(self.ShieldUnit)
+    local power = SHIELD_UNIT.DefaultExplodePower
+    if reportName then
+        power = SHIELD_UNIT.ExplodePowerExhaust[reportName]
+    end
+
+    env.info("Debug: TypeName:" .. reportName .. " Boom power:" .. power)
+    self.Unit:Explode(power)
+end
+
+function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
+    env.info("do check")
+    -- 初始化
+    -- TODO: 补充初始化说明信息
+    if self:Is("Init") then
+        self:Start()
+    end
+
+    if self:Is("Stopped") then
+
+        -- 回复护盾值(如果护盾值小于零,则自动归零)
+        if self.ShieldHealth < 0 then
+            self.ShieldHealth = 0
+        end
+        if self.ShieldHealth < self.MaxShieldHealth then
+            self.ShieldHealth = self.ShieldHealth + self.ShieldSpeedRecovery * self.dTstatus
+        else
+            self.ShieldHealth = self.MaxShieldHealth
+        end
+    end
+
+    if self:Is("Protecting") or self:Is("") then
+        -- 护盾值消耗
+        self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.dTstatus
+
+        if self.ShieldHealth <= 0 then
+            self:Exhaust()
+        end
+
+        -- TODO: 添加护盾值消耗程度的报警
+    end
+
+    if self:Is("Damaging") then
+        env.info("do damaging check")
+        -- 护盾值消耗
+        self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.dTstatus
+
+        if self.ShieldHealth <= self.BoomShieldHealth then
+            self:Boom()
+        end
+    end
+end
+

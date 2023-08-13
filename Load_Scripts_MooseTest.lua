@@ -1,7 +1,7 @@
 local script_path = "C:/Users/Issen/Saved Games/DCS/Missions/Mission-Scripts/"
 
 local script_list = { -- Load order must be correct
-"Moose.lua", "MooseTest.lua"}
+"Moose.lua", "SolarStorm.lua", "MooseTest.lua"}
 
 local function load_scripts(path, list)
     for _, value in ipairs(list) do
