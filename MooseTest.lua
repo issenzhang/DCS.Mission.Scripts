@@ -46,6 +46,7 @@
 --     unit2:Explode(0.15)
 -- end):Start(2)
 -- #2 test finished
+
 -- todo:
 -- #1 测试SHIELD_UNIT类是否工作正常
 -- #2 测试连续爆炸是否会导致机体受损
@@ -58,4 +59,4 @@ end):Start(1, 1)
 
 -- 结果
 -- #1 基础通过
--- #2 测试加速爆炸40次不会
+-- #2 测试加速爆炸40次不会(问题: CheckStatus状态不对)

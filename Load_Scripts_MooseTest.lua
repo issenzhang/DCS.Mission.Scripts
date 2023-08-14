@@ -18,7 +18,3 @@ else
 end
 
 load_scripts(script_path, script_list)
-
--- todo:
--- #1 测试ZONE_UNIT功能,是否offset绑定的触发区可以跟随单位转动而变化
--- #2 测试爆炸功能是否会造成本单位的毁伤

@@ -242,9 +242,15 @@ function SHIELD_UNIT:New(ShieldUnit)
 
     self.Unit = ShieldUnit
 
-    self.BoomShieldHealth = SHIELD_UNIT.DefaultBoomExplodePower
+    -- Initiate default
+    self:SetStatusUpdateTime(SHIELD_UNIT.DefaultTimeInterval)
+    self.BoomShieldHealth = self.DefaultBoomExplodePower
+    self.ShieldHealth = self.DefaultShieldHealth
+    self.ShieldSpeedConsume = self.DefaultSShieldSpeedConsume
+    self.ShieldSpeedRecovery = self.DefaultSShieldSpeedRecovery
 
-    -- 配置FSM信息
+    -- FSM settings
+
     -- Start State.
     self:SetStartState("Init")
 
@@ -253,20 +259,19 @@ function SHIELD_UNIT:New(ShieldUnit)
     self:AddTransition("Init", "Start", "Stopped") -- 护盾被激活
     self:AddTransition("Stopped", "ExitSafeZone", "Protecting") -- 护盾被激活
     self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Stopped") -- 护盾被回复
-    self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中
+    
+    self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中 -- for fsm test
+    -- self:AddTransition("Protecting", "Exhaust", "Damaging") -- 机体受损中
+    
     self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
-
     self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
 
-    self:SetStatusUpdateTime(SHIELD_UNIT.DefaultTimeInterval)
 
-       
-    self.StatusTimer = TIMER:New(function()
-        self:CheckStatus()
-    end):Start(1, self.dTstatus)
+
+    self.__Status(-1 * self.dTstatus)
 
     ------------------
-    -- end New Shield Unit
+    -- End New Shield Unit
     ------------------
     return self
 end
@@ -287,6 +292,10 @@ function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
         self.Unit:MessageToAll(Message, Duration or self.DefaultMessageDuration, Name)
     end
 end
+
+------------------
+-- FSM FUNCTIONS
+------------------
 
 -- 护盾耗尽
 function SHIELD_UNIT:OnAfterExhaust(From, Event, To)
@@ -338,7 +347,7 @@ function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
         end
     end
 
-    if self:Is("Protecting") or self:Is("") then
+    if self:Is("Protecting") then
         -- 护盾值消耗
         self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.dTstatus
 
@@ -358,5 +367,8 @@ function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
             self:Boom()
         end
     end
+
+    --循环执行该方法
+    self.__CheckStatus(-1*self.dTstatus)
 end
 
