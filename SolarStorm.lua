@@ -164,15 +164,16 @@ end
 -- @field 堡垒单位
 FORTRESS_UNIT = {
     ClassName = "FORTRESS_UNIT",
-    FortressData = {}
+    FortressData = {},
+    Unit = nil
 }
 
 ---- Data Settings ----
 
 -- todo:重新制订数据
 FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
-FORTRESS_UNIT.DefaultGroundData = {5*1800, 4000/3, -1000/3}
-FORTRESS_UNIT.DefaultShipData = {5*1800, 4000/3, -1000/3}
+FORTRESS_UNIT.DefaultGroundData = {5 * 1800, 4000 / 3, -1000 / 3}
+FORTRESS_UNIT.DefaultShipData = {5 * 1800, 4000 / 3, -1000 / 3}
 FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000}
 
 ---- Data Settings End ----
@@ -206,15 +207,32 @@ end
 
 -- todo: 缺完善
 function FORTRESS_UNIT:IsProtecting()
-    
+
     return false
 end
 
 function FORTRESS_UNIT:New(FortressUnit)
     local self = BASE:Inherit(self, FSM:New())
+    self.Unit = FortressUnit
+
+    --- FSM INIT ---    
+    -- Start State.
+    if FORTRESS_UNIT.IsDefaultProtecting then 
+        self:SetStartState("Protecting")
+    else
+        self:SetStartState("Stopped")
+    end
+
+    -- Add FSM transitions.
+    -- From State --> Event --> To State
+    self:AddTransition("Stopped", "Start", "Protecting")
+    self:AddTransition("Protecting", "Stop", "Stopped")
+
+    --- EVENT REGISTER ---
+    self:HandleEvent(EVENTS.Crash, self._OnEventCrashOrDead)
+    self:HandleEvent(EVENTS.Dead, self._OnEventCrashOrDead)
+
 end
-
-
 
 
 
@@ -339,7 +357,6 @@ function SHIELD_UNIT:New(ShieldUnit)
     return self
 end
 
-
 ------------------
 -- FSM FUNCTIONS
 ------------------
@@ -377,7 +394,6 @@ end
 ------------------
 -- FSM FUNCTIONS END
 ------------------
-
 
 function SHIELD_UNIT:CheckStatus()
     -- 初始化
