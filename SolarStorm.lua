@@ -115,10 +115,10 @@ HELPER.ReportingName = -- 待继续补充
     Growler = "EA-18G"
 }
 
-function HELPER.GetReportingName(Unit)
-    -- 获取爆炸当量信息
-    local typeName = Unit:GetTypeName()
+function HELPER.GetReportingName(TypeName)
     local reportName = nil
+    local typename = string.lower(TypeName)
+
     for name, value in pairs(HELPER.ReportingName) do
         local svalue = string.lower(value)
         if string.find(typename, svalue, 1, true) then
@@ -126,8 +126,7 @@ function HELPER.GetReportingName(Unit)
         end
     end
     if reportName == nil then
-        Unit:T("HELPER: TypeName Not Found:" .. typeName)
-
+        -- env.info("HELPER: TypeName Not Found:" .. TypeName)
     end
     return reportName
 end
@@ -139,6 +138,7 @@ SOLAR_STORM = {
 }
 
 SOLAR_STORM.TableFortress = {}
+SOLAR_STORM.TableShieldUnit = {}
 
 function SOLAR_STORM:New()
     local self = BASE:Inherit(self, FSM:New())
@@ -149,7 +149,7 @@ function SOLAR_STORM:New()
 
     -- Add FSM transitions.
     -- From State --> Event --> To State
-    self:AddTransition("Stopped", "Start", "Happenning")
+    self:AddTransition("Stopped", "Strike", "Happenning")
     self:AddTransition("Happenning", "Stop", "Stopped")
 
     self:AddTransition("*", "CheckStatus", "*")
@@ -163,10 +163,19 @@ end
 
 -- @field 堡垒单位
 FORTRESS_UNIT = {
-    ClassName = "FORTRESS_UNIT"
+    ClassName = "FORTRESS_UNIT",
+    FortressData = {}
 }
 
+---- Data Settings ----
+
+-- todo:重新制订数据
 FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
+FORTRESS_UNIT.DefaultGroundData = {5*1800, 4000/3, -1000/3}
+FORTRESS_UNIT.DefaultShipData = {5*1800, 4000/3, -1000/3}
+FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000}
+
+---- Data Settings End ----
 
 FORTRESS_UNIT.UnitTypeData = {
     Hercules = {300, 300, 300}, -- C-130
@@ -177,16 +186,37 @@ FORTRESS_UNIT.UnitTypeData = {
     Sea_King = {150, 150, 150} -- S-61
 }
 
-function FORTRESS_UNIT:New(FortressUnit)
-    local type = HELPER.GetReportingName(FortressUnit)
-    local fortressData = FORTRESS_UNIT.DefaultData
-    if type then
-        local data = FORTRESS_UNIT.UnitTypeData[type]
-        if data then
-            fortressData = data
-        end
+function FORTRESS_UNIT:SetFortressData(Data)
+    self.FortressData = Data
+    return self
+end
+
+function FORTRESS_UNIT:GetFortressData(FortressUnit)
+    if FortressUnit:IsGround() then
+        return FORTRESS_UNIT.DefaultGroundData
+    elseif FortressUnit:IsShip() then
+        return FORTRESS_UNIT.DefaultShipData
+    elseif FortressUnit:IsAir() then
+        -- todo: 制订各机型的数据
+        return FORTRESS_UNIT.DefaultAirData
+    else
+        return FORTRESS_UNIT.DefaultData
     end
 end
+
+-- todo: 缺完善
+function FORTRESS_UNIT:IsProtecting()
+    
+    return false
+end
+
+function FORTRESS_UNIT:New(FortressUnit)
+    local self = BASE:Inherit(self, FSM:New())
+end
+
+
+
+
 
 -- @field 带有护盾的单位
 SHIELD_UNIT = {
@@ -211,8 +241,8 @@ SHIELD_UNIT = {
 SHIELD_UNIT.DefaultTimeInterval = 1 -- UNIT执行周期
 SHIELD_UNIT.DefaultMessageDuration = 15 -- 一般信息的显示时长
 
-SHIELD_UNIT.DefaultShieldHealth = 1200 -- 护盾能量值
-SHIELD_UNIT.DefualtBoomHealth = -600 -- 机体受损的护盾阈值
+SHIELD_UNIT.DefaultShieldHealth = 600 -- 护盾能量值
+SHIELD_UNIT.DefualtBoomHealth = -300 -- 机体受损的护盾阈值
 SHIELD_UNIT.DefaultSShieldSpeedConsume = 1 -- 护盾消耗速率（/秒）
 SHIELD_UNIT.DefaultSShieldSpeedRecovery = 15 -- 护盾回复速率（/秒）
 
@@ -229,57 +259,23 @@ SHIELD_UNIT.UnitTypeExplodePower = -- 各机型的受损爆炸当量
     RhinoF = 0.15,
     Growler = 0.15,
     Mudhen = 1.6, -- F-15E:损坏单发引擎
-    Viper = 0.7 -- F-16:损坏通讯天线
+    Viper = 0.7, -- F-16:损坏通讯天线
+    Dragon = 0.15 -- JF-17 for test
 }
 
 ----------------------
 -- SHIELD Settings End
 ----------------------
 
-function SHIELD_UNIT:New(ShieldUnit)
-    local self = BASE:Inherit(self, FSM:New())
-    self:F(ShieldUnit)
+----------------------
+-- SHIELD User Functions
+----------------------
 
-    self.Unit = ShieldUnit
-
-    -- Initiate default
-    self:SetStatusUpdateTime(SHIELD_UNIT.DefaultTimeInterval)
-    self.BoomShieldHealth = self.DefaultBoomExplodePower
-    self.ShieldHealth = self.DefaultShieldHealth
-    self.ShieldSpeedConsume = self.DefaultSShieldSpeedConsume
-    self.ShieldSpeedRecovery = self.DefaultSShieldSpeedRecovery
-
-    -- FSM settings
-
-    -- Start State.
-    self:SetStartState("Init")
-
-    -- Add FSM transitions.
-    -- From State --> Event --> To State
-    self:AddTransition("Init", "Start", "Stopped") -- 护盾被激活
-    self:AddTransition("Stopped", "ExitSafeZone", "Protecting") -- 护盾被激活
-    self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Stopped") -- 护盾被回复
-    
-    self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中 -- for fsm test
-    -- self:AddTransition("Protecting", "Exhaust", "Damaging") -- 机体受损中
-    
-    self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
-    self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
-
-
-
-    self.__Status(-1 * self.dTstatus)
-
-    ------------------
-    -- End New Shield Unit
-    ------------------
+function SHIELD_UNIT:SetShieldHealth(Health)
+    self.ShieldHealth = Health
     return self
 end
 
---- Set time interval for updating player status and other things.
--- @param #SHIELD_UNIT self
--- @param #number TimeInterval Time interval in seconds. Default 1 sec.
--- @return #SHIELD_UNIT self
 function SHIELD_UNIT:SetStatusUpdateTime(TimeInterval)
     self.dTstatus = TimeInterval or 1
     return self
@@ -291,7 +287,58 @@ function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
     else
         self.Unit:MessageToAll(Message, Duration or self.DefaultMessageDuration, Name)
     end
+    return self
 end
+----------------------
+-- SHIELD User End
+----------------------
+
+function SHIELD_UNIT:New(ShieldUnit)
+    local self = BASE:Inherit(self, FSM:New())
+    self:F(ShieldUnit)
+
+    self.Unit = ShieldUnit
+
+    -- Initiate parameters
+    self:SetStatusUpdateTime(SHIELD_UNIT.DefaultTimeInterval)
+    self.BoomShieldHealth = SHIELD_UNIT.DefaultBoomExplodePower
+    self.ShieldHealth = SHIELD_UNIT.DefaultShieldHealth
+    self.ShieldSpeedConsume = SHIELD_UNIT.DefaultSShieldSpeedConsume
+    self.ShieldSpeedRecovery = SHIELD_UNIT.DefaultSShieldSpeedRecovery
+
+    self.MaxShieldHealth = SHIELD_UNIT.DefaultShieldHealth
+    self.BoomShieldHealth = SHIELD_UNIT.DefualtBoomHealth
+
+    -- FSM settings
+
+    -- Start State.
+    self:SetStartState("Init")
+
+    -- Add FSM transitions.
+    -- From State --> Event --> To State
+    self:AddTransition("Init", "Start", "Recovering") -- 护盾被激活
+    self:AddTransition("Recovering", "ExitSafeZone", "Protecting") -- 护盾被激活
+    self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Recovering") -- 护盾被回复
+
+    self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中 -- for fsm test
+    -- self:AddTransition("Protecting", "Exhaust", "Damaging") -- 机体受损中
+
+    self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
+    -- self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
+
+    self.TimerCheckStatus = TIMER:New(function()
+        self:CheckStatus()
+    end):Start(1, self.dTstatus)
+
+    env.info("SHIELD_UNIT New Finished")
+    env.info(self.ShieldHealth)
+
+    ------------------
+    -- End New Shield Unit
+    ------------------
+    return self
+end
+
 
 ------------------
 -- FSM FUNCTIONS
@@ -299,14 +346,13 @@ end
 
 -- 护盾耗尽
 function SHIELD_UNIT:OnAfterExhaust(From, Event, To)
-    self:MessageNotify("警告:护盾已经耗尽.机体正在受损.")
+    self:MessageNotify("警告: 护盾已经耗尽. 机体正在受损. 请尽快重新充能护盾.")
 end
 
 function SHIELD_UNIT:OnEnterDamaging(From, Event, To)
-    env.info("Debug: Entering Status Damaging")
     self.TimerExhaust = TIMER:New(function()
         self.Unit:Explode(self.ShieldExhaustExplodePower)
-    end):Start(1, 1)
+    end):Start(1, 5)
 end
 
 function SHIELD_UNIT:OnLeaveDamaging(From, Event, To)
@@ -316,29 +362,36 @@ end
 -- 摧毁或损坏受太阳风暴的单位
 function SHIELD_UNIT:OnAfterBoom(From, Event, To)
 
-    local reportName = HELPER.GetReportingName(self.ShieldUnit)
-    local power = SHIELD_UNIT.DefaultExplodePower
+    local reportName = HELPER.GetReportingName(self.Unit:GetTypeName())
+    local power = SHIELD_UNIT.DefaultBoomExplodePower
     if reportName then
-        power = SHIELD_UNIT.ExplodePowerExhaust[reportName]
+        if SHIELD_UNIT.UnitTypeExplodePower[reportName] then
+            power = SHIELD_UNIT.UnitTypeExplodePower[reportName]
+        end
     end
-
-    env.info("Debug: TypeName:" .. reportName .. " Boom power:" .. power)
+    env.info("Debug: TypeName:" .. (reportName or "typename:" .. self.Unit:GetTypeName()) .. " Boom power:" ..
+                 tostring(power))
     self.Unit:Explode(power)
 end
 
-function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
-    env.info("do check")
+------------------
+-- FSM FUNCTIONS END
+------------------
+
+
+function SHIELD_UNIT:CheckStatus()
     -- 初始化
     -- TODO: 补充初始化说明信息
     if self:Is("Init") then
         self:Start()
     end
 
-    if self:Is("Stopped") then
+    if self:Is("Recovering") then
 
         -- 回复护盾值(如果护盾值小于零,则自动归零)
         if self.ShieldHealth < 0 then
             self.ShieldHealth = 0
+            env.info("Debug: Recovery Shiled Health")
         end
         if self.ShieldHealth < self.MaxShieldHealth then
             self.ShieldHealth = self.ShieldHealth + self.ShieldSpeedRecovery * self.dTstatus
@@ -359,7 +412,6 @@ function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
     end
 
     if self:Is("Damaging") then
-        env.info("do damaging check")
         -- 护盾值消耗
         self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.dTstatus
 
@@ -367,8 +419,6 @@ function SHIELD_UNIT:OnAfterCheckStatus(From, Event, To)
             self:Boom()
         end
     end
-
-    --循环执行该方法
-    self.__CheckStatus(-1*self.dTstatus)
+    return self
 end
 

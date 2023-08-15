@@ -46,17 +46,35 @@
 --     unit2:Explode(0.15)
 -- end):Start(2)
 -- #2 test finished
-
--- todo:
+-- done:
 -- #1 测试SHIELD_UNIT类是否工作正常
 -- #2 测试连续爆炸是否会导致机体受损
-local unit2 = UNIT:FindByName("fp-2-1")
-local su = SHIELD_UNIT:New(unit2)
-su:Exhaust()
-local t = TIMER:New(function()
-    su.Unit:MessageToAll(su.ShieldHealth .. "|" .. su:GetState())
-end):Start(1, 1)
-
+-- local unit2 = UNIT:FindByName("fp-2-1")
+-- local su = SHIELD_UNIT:New(unit2)
+-- local t = TIMER:New(function()
+--     su.Unit:MessageToAll(su.ShieldHealth .. "|" .. su:GetState())
+-- end):Start(nil, 1)
+-- su:SetShieldHealth(60)
+-- -- remark: FSM:__Event() 是异步方法,可以再程序中序列添加
+-- su:__ExitSafeZone(2) -- OK
+-- su:ExitSafeZone(2) -- Not work
+-- local t2 = TIMER:New(function()
+--    su.Unit:MessageToAll("Exit Safe Zone")
+--    su:__ExitSafeZone(2)
+-- end):Start(2)
 -- 结果
 -- #1 基础通过
 -- #2 测试加速爆炸40次不会(问题: CheckStatus状态不对)
+-- local unit2 = UNIT:FindByName("fp-2-4")
+-- env.info("debug:" .. unit2:GetUnitCategory())
+-- remark:静态目标无法使用UNIT类
+-- #1 remark:测试ZONE_UNIT功能,是否offset绑定的触发区可以跟随单位转动而变化
+-- #1 remark:result: 会跟随机头变化
+-- #2 remark:爆炸的目标会报错找不到单位(Object doesn't exist)
+-- UnitName = 飞行员姓名
+local unit = UNIT:FindByName("fp-2-4")
+local zoneUnit_Test = ZONE_UNIT:New("test", unit, 25)
+local timer = TIMER:New(function()
+    zoneUnit_Test:FlareZone(FLARECOLOR.Red, 6)    
+end):Start(nil, 1)
+unit:Explode(100, 5)
