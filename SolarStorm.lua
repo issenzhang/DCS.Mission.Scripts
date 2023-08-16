@@ -161,19 +161,43 @@ end
 function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
 end
 
+function SOLAR_STORM:CheckStatus()
+end
+
+function SOLAR_STORM:CheckShieldUnit(ShieldUnit)
+    if SOLAR_STORM:IsState("Stopped") then
+        return true
+    end
+
+    local isInProtected = true
+    for _, fortress in (self.TableFortress) do
+        local zb = ZONEBOX_UNIT:New("", fortress.Unit, fortress.Data[1], nil, fortress.Data[2], fortress.Data[3])
+        if zb:IsUnitInBox(ShieldUnit.Unit) then
+            if fortress:IsProtecting() then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 -- @field 堡垒单位
 FORTRESS_UNIT = {
     ClassName = "FORTRESS_UNIT",
-    FortressData = {}
+    FortressUnit = nil,
+    FortressData = nil
 }
 
 ---- Data Settings ----
 
 -- todo:重新制订数据
 FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
-FORTRESS_UNIT.DefaultGroundData = {5*1800, 4000/3, -1000/3}
-FORTRESS_UNIT.DefaultShipData = {5*1800, 4000/3, -1000/3}
+FORTRESS_UNIT.DefaultGroundData = {5 * 1800, 4000 / 3, -1000 / 3}
+FORTRESS_UNIT.DefaultShipData = {5 * 1800, 4000 / 3, -1000 / 3}
 FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000}
+
+FORTRESS_UNIT.IsDefautlStart = true
 
 ---- Data Settings End ----
 
@@ -204,19 +228,28 @@ function FORTRESS_UNIT:GetFortressData(FortressUnit)
     end
 end
 
--- todo: 缺完善
 function FORTRESS_UNIT:IsProtecting()
-    
-    return false
+    return self:Is("Protecting")
 end
 
 function FORTRESS_UNIT:New(FortressUnit)
     local self = BASE:Inherit(self, FSM:New())
+
+    self.FortressUnit = FortressUnit
+
+    -- FSM settings
+    -- Start State.
+    if FORTRESS_UNIT.IsDefautlStart then
+        self:SetStartState("Protecting")
+    else
+        self:SetStartState("Stopped")
+    end
+
+    -- Add FSM transitions.
+    -- From State --> Event --> To State
+    self:AddTransition("Stopped", "Start", "Protecting")
+    self:AddTransition("*", "Stop", "Stopped")
 end
-
-
-
-
 
 -- @field 带有护盾的单位
 SHIELD_UNIT = {
@@ -339,7 +372,6 @@ function SHIELD_UNIT:New(ShieldUnit)
     return self
 end
 
-
 ------------------
 -- FSM FUNCTIONS
 ------------------
@@ -377,7 +409,6 @@ end
 ------------------
 -- FSM FUNCTIONS END
 ------------------
-
 
 function SHIELD_UNIT:CheckStatus()
     -- 初始化
