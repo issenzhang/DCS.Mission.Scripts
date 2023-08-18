@@ -137,6 +137,12 @@ SOLAR_STORM = {
     ClassName = "SOLAR_STORM"
 }
 
+---- SOLAR STORM Settings ----
+SOLAR_STORM.IsAvailableUnderStrike_SAM = true
+SOLAR_STORM.SAMRangeUnderStrike = 10 -- 0~100% 受太阳风暴影响,防空雷达的开机时,雷达的开火射程
+
+SOLAR_STORM.IsAvailableUnderStrike_GPSWeapons = false
+
 SOLAR_STORM.TableFortress = {}
 SOLAR_STORM.TableShieldUnit = {}
 
@@ -161,6 +167,36 @@ end
 function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
 end
 
+function SOLAR_STORM:CheckStatus()
+
+    for _,unit in ipairs(self.TableShieldUnit) do
+        if self:CheckShieldUnit(unit) then 
+            unit:EnterSafeZone()
+        else
+            unit:ExitSafeZone()
+        end
+    end
+end
+
+function SOLAR_STORM:CheckShieldUnit(ShieldUnit)
+
+    if SOLAR_STORM:IsState("Stopped") then
+        return true
+    end
+
+    local isInProtected = false
+    for _, fortress in (self.TableFortress) do
+        if fortress:IsProtecting(ShieldUnit) then
+              return true            
+        end
+    end
+
+    return false
+end
+
+---- FSM EVENTS ----
+
+
 -- @field 堡垒单位
 FORTRESS_UNIT = {
     ClassName = "FORTRESS_UNIT",
@@ -175,6 +211,8 @@ FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高
 FORTRESS_UNIT.DefaultGroundData = {5 * 1800, 4000 / 3, -1000 / 3}
 FORTRESS_UNIT.DefaultShipData = {5 * 1800, 4000 / 3, -1000 / 3}
 FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000}
+
+FORTRESS_UNIT.IsDefautlStart = true
 
 ---- Data Settings End ----
 
@@ -205,9 +243,15 @@ function FORTRESS_UNIT:GetFortressData(FortressUnit)
     end
 end
 
--- todo: 缺完善
-function FORTRESS_UNIT:IsProtecting()
-
+function FORTRESS_UNIT:IsProtecting(ShieldUnit)
+    if self.Is("Protecting") then
+        local zb = ZONEBOX_UNIT:New("", self.Unit, self.Data[1], nil, self.Data[2], self.Data[3])
+        if zb:IsUnitInBox(ShieldUnit.Unit) then
+            if fortress:IsProtecting() then
+                return true
+            end
+        end
+    end
     return false
 end
 
@@ -299,6 +343,8 @@ function SHIELD_UNIT:SetStatusUpdateTime(TimeInterval)
     return self
 end
 
+-- todo: 重新制作通知方法&加入debug
+-- todo: 添加发送声音警告
 function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
     if self.Unit:IsClient() then
         self.Unit:MessageToClient(Message, Duration or self.DefaultMessageDuration, self.Unit:GetClient(), Name)
