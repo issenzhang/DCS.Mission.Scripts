@@ -138,10 +138,18 @@ SOLAR_STORM = {
 }
 
 ---- SOLAR STORM Settings ----
-SOLAR_STORM.IsAvailableUnderStrike_SAM = true
-SOLAR_STORM.SAMRangeUnderStrike = 10 -- 0~100% 受太阳风暴影响,防空雷达的开机时,雷达的开火射程
 
+SOLAR_STORM.TableShieldUnitNamePrefixes = {}
+SOLAR_STORM.TableFortressNamePrefixes = {}
+
+-- todo: enable sam function
+SOLAR_STORM.IsAvailableUnderStrikeSAM = true -- true:受到太阳风影响的SAM仍会开机(但效率受到影响,通过SAMRangeUnderStrike配置)
+SOLAR_STORM.SAMRangeUnderStrike = 10 -- (%) 0%~100% 受太阳风暴影响,防空雷达的开机时,雷达的开火射程
+
+-- todo: enable gps weapon fucntion
 SOLAR_STORM.IsAvailableUnderStrike_GPSWeapons = false
+
+--- SOLAR STORM Values ---
 
 SOLAR_STORM.TableFortress = {}
 SOLAR_STORM.TableShieldUnit = {}
@@ -168,9 +176,9 @@ function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
 end
 
 function SOLAR_STORM:CheckStatus()
-
-    for _,unit in ipairs(self.TableShieldUnit) do
-        if self:CheckShieldUnit(unit) then 
+    -- check shield unit status
+    for _, unit in ipairs(self.TableShieldUnit) do
+        if self:CheckShieldUnit(unit) then
             unit:EnterSafeZone()
         else
             unit:ExitSafeZone()
@@ -187,7 +195,7 @@ function SOLAR_STORM:CheckShieldUnit(ShieldUnit)
     local isInProtected = false
     for _, fortress in (self.TableFortress) do
         if fortress:IsProtecting(ShieldUnit) then
-              return true            
+            return true
         end
     end
 
@@ -195,7 +203,6 @@ function SOLAR_STORM:CheckShieldUnit(ShieldUnit)
 end
 
 ---- FSM EVENTS ----
-
 
 -- @field 堡垒单位
 FORTRESS_UNIT = {
@@ -261,7 +268,7 @@ function FORTRESS_UNIT:New(FortressUnit)
 
     --- FSM INIT ---    
     -- Start State.
-    if FORTRESS_UNIT.IsDefaultProtecting then 
+    if FORTRESS_UNIT.IsDefaultProtecting then
         self:SetStartState("Protecting")
     else
         self:SetStartState("Stopped")
@@ -275,7 +282,6 @@ function FORTRESS_UNIT:New(FortressUnit)
     --- EVENT REGISTER ---
     self:HandleEvent(EVENTS.Crash, self._OnEventCrashOrDead)
     self:HandleEvent(EVENTS.Dead, self._OnEventCrashOrDead)
-
 end
 
 
@@ -296,9 +302,7 @@ SHIELD_UNIT = {
     Unit = nil
 }
 
-----------------------
--- SHIELD Settings
-----------------------
+--- SHIELD Settings ---
 
 SHIELD_UNIT.DefaultTimeInterval = 1 -- UNIT执行周期
 SHIELD_UNIT.DefaultMessageDuration = 15 -- 一般信息的显示时长
@@ -308,9 +312,7 @@ SHIELD_UNIT.DefualtBoomHealth = -300 -- 机体受损的护盾阈值
 SHIELD_UNIT.DefaultSShieldSpeedConsume = 1 -- 护盾消耗速率（/秒）
 SHIELD_UNIT.DefaultSShieldSpeedRecovery = 15 -- 护盾回复速率（/秒）
 
-------------------
--- 受损惩罚
-------------------
+--- 受损惩罚 ---
 SHIELD_UNIT.ShieldExhaustExplodePower = 0.001 -- 护盾耗尽情况下的火光效果模拟
 SHIELD_UNIT.DefaultBoomExplodePower = 0.15 -- 默认机体受损的爆炸当量
 
@@ -322,16 +324,12 @@ SHIELD_UNIT.UnitTypeExplodePower = -- 各机型的受损爆炸当量
     Growler = 0.15,
     Mudhen = 1.6, -- F-15E:损坏单发引擎
     Viper = 0.7, -- F-16:损坏通讯天线
-    Dragon = 0.15 -- JF-17 for test
+    Dragon = 0.15 -- JF-17:损坏部分航电,后续影响未明
 }
 
-----------------------
--- SHIELD Settings End
-----------------------
+--- SHIELD Settings End ---
 
-----------------------
--- SHIELD User Functions
-----------------------
+--- SHIELD User Functions ---
 
 function SHIELD_UNIT:SetShieldHealth(Health)
     self.ShieldHealth = Health
@@ -353,9 +351,8 @@ function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
     end
     return self
 end
-----------------------
--- SHIELD User End
-----------------------
+
+--- User Functions End ---
 
 function SHIELD_UNIT:New(ShieldUnit)
     local self = BASE:Inherit(self, FSM:New())
@@ -394,18 +391,10 @@ function SHIELD_UNIT:New(ShieldUnit)
         self:CheckStatus()
     end):Start(1, self.dTstatus)
 
-    env.info("SHIELD_UNIT New Finished")
-    env.info(self.ShieldHealth)
-
-    ------------------
-    -- End New Shield Unit
-    ------------------
     return self
 end
 
-------------------
--- FSM FUNCTIONS
-------------------
+--- FSM FUNCTIONS ---
 
 -- 护盾耗尽
 function SHIELD_UNIT:OnAfterExhaust(From, Event, To)
