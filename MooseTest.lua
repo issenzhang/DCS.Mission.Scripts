@@ -72,9 +72,29 @@
 -- #1 remark:result: 会跟随机头变化
 -- #2 remark:爆炸的目标会报错找不到单位(Object doesn't exist)
 -- UnitName = 飞行员姓名
-local unit = UNIT:FindByName("fp-2-4")
-local zoneUnit_Test = ZONE_UNIT:New("test", unit, 25)
-local timer = TIMER:New(function()
-    zoneUnit_Test:FlareZone(FLARECOLOR.Red, 6)    
-end):Start(nil, 1)
-unit:Explode(100, 5)
+-- local unit = UNIT:FindByName("fp-2-4")
+-- local zoneUnit_Test = ZONE_UNIT:New("test", unit, 25)
+-- local timer = TIMER:New(function()
+--     zoneUnit_Test:FlareZone(FLARECOLOR.Red, 6)    
+-- end):Start(nil, 1)
+-- unit:Explode(100, 5)
+-- 
+-- 测试STORM-STRIKE
+local st = SOLAR_STORM:New()
+local table_f = {"ff"}
+local table_s = {"sf"}
+st.TableShieldUnitNamePrefixes = table_s
+st.TableFortressNamePrefixes = table_f
+st.IsDebugMode = true
+st:Strike()
+
+-- local t1 = TIMER:New(function ()
+--     st:Stop()    
+-- end):Start(25)
+--
+-- test set unit
+-- local su = SET_UNIT:New():FilterPrefixes("ff"):FilterStart()
+-- local timer = TIMER:New(function()
+--     MESSAGE:New(tostring(su:CountAlive()), 1):ToAll()
+-- end):Start(0, 1)
+-- result: worked as planned

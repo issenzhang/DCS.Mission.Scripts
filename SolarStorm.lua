@@ -1,3 +1,52 @@
+env.info("== Load Solar Storm ==")
+-- 基于MOOSE系统, 增加一种可以自定义某单位的区域
+-- 计划特性
+-- [ ] 自定义触发箱的空间高度
+-- [ ] 基于UNIT航向的前后左右触发箱--使用ZONE_UNIT..offset特性
+ZONEBOX_UNIT = {
+    ClassName = "ZONEBOX_UNIT",
+    AltitudeDiff_Top = 0,
+    AltitudetDiff_Bottom = 0
+}
+
+function ZONEBOX_UNIT:New(ZoneName, ZoneUnit, Radius, Offset, AltitudeDiffTop, AltitudeDiffBottom)
+    local self = BASE:Inherit(self, ZONE_UNIT:New(ZoneName, ZoneUnit, Radius, Offset))
+
+    -- self:F({ZoneName, ZONE_UNIT:GetVec2(), Radius, Offset, AltitudeDiffTop, AltitudeDiffBottom})
+
+    self.ZoneUNIT = ZoneUnit
+    if AltitudeDiffTop < AltitudeDiffBottom then
+        error("AltitudeDiff Input Error")
+    end
+
+    self.AltitudeDiff_Top = AltitudeDiffTop or 0
+    self.AltitudeDiff_Bottom = AltitudeDiffBottom or 0
+
+    -- Zone objects are added to the _DATABASE and SET_ZONE objects.
+    _EVENTDISPATCHER:CreateEventNewZone(self)
+
+    return self
+end
+
+function ZONEBOX_UNIT:IsAltitudeMatched(Altitude)
+
+    local unitAltitude = 0
+
+    if self.ZoneUNIT then
+        unitAltitude = self.ZoneUNIT:GetAltitude()
+    end
+
+    if unitAltitude + self.AltitudeDiff_Top >= Altitude and unitAltitude + self.AltitudeDiff_Bottom <= Altitude then
+        return true
+    end
+
+    return false
+end
+
+function ZONEBOX_UNIT:IsUnitInBox(Unit)
+    return Unit:IsInZone(self) and self:IsAltitudeMatched(Unit:GetAltitude())
+end
+
 HELPER = {}
 
 -- 具体参照ENUMS.ReportingName
@@ -138,9 +187,11 @@ SOLAR_STORM = {
 }
 
 ---- SOLAR STORM Settings ----
+SOLAR_STORM.IsDebugMode = true
 
 SOLAR_STORM.TableShieldUnitNamePrefixes = {}
 SOLAR_STORM.TableFortressNamePrefixes = {}
+SOLAR_STORM.TableSAMNamePrefixes = {}
 
 -- todo: enable sam function
 SOLAR_STORM.IsAvailableUnderStrikeSAM = true -- true:受到太阳风影响的SAM仍会开机(但效率受到影响,通过SAMRangeUnderStrike配置)
@@ -148,11 +199,20 @@ SOLAR_STORM.SAMRangeUnderStrike = 10 -- (%) 0%~100% 受太阳风暴影响,防空
 
 -- todo: enable gps weapon fucntion
 SOLAR_STORM.IsAvailableUnderStrike_GPSWeapons = false
+---- SOLAR STORM SETTINGS END ----
 
 --- SOLAR STORM Values ---
-
 SOLAR_STORM.TableFortress = {}
 SOLAR_STORM.TableShieldUnit = {}
+
+SOLAR_STORM.UnitSetShield = nil
+SOLAR_STORM.UnitSetFortress = nil
+SOLAR_STORM.UnitSetSAM = nil
+
+SOLAR_STORM.TimerUpdateUnit = nil
+SOLAR_STORM.TimerUpdateStatus = nil
+SOLAR_STORM.TimerSAM = nil
+--- SOLAR STORM Values End---
 
 function SOLAR_STORM:New()
     local self = BASE:Inherit(self, FSM:New())
@@ -166,41 +226,141 @@ function SOLAR_STORM:New()
     self:AddTransition("Stopped", "Strike", "Happenning")
     self:AddTransition("Happenning", "Stop", "Stopped")
 
-    self:AddTransition("*", "CheckStatus", "*")
+    -- add timer
+    self.TimerUpdateUnit = TIMER:New(function()
+        self:UpdateUnits()
+    end):Start(0, 2)
+
+    self.TimerUpdateStatus = TIMER:New(function()
+        self:UpdateStatus()
+    end):Start(0, 1)
+
+    return self
 end
 
-function SOLAR_STORM:AddShieldFotressByUnitNamePrefix(UnitNamePrefix)
+--- SOLAR SOTRM USER FUNCTIONS ----
+function SOLAR_STORM:SetShieldNamePrefixes(TableNamePrefixes)
+    self.TableShieldUnitNamePrefixes = TableNamePrefixes
+    return self
 end
 
-function SOLAR_STORM:AddShieldFotressByUnitNameTable(UnitNameTable)
+function SOLAR_STORM:SetFortressNamePrefixes(TableNamePrefixes)
+    self.TableFortressNamePrefixes = TableNamePrefixes
+    return self
 end
 
-function SOLAR_STORM:CheckStatus()
-    -- check shield unit status
-    for _, unit in ipairs(self.TableShieldUnit) do
-        if self:CheckShieldUnit(unit) then
-            unit:EnterSafeZone()
-        else
-            unit:ExitSafeZone()
-        end
+function SOLAR_STORM:SetSAMNamePrefixes(TableNamePrefixes)
+    self.TableSAMNamePrefixes = TableNamePrefixes
+end
+
+function SOLAR_STORM:UpdateUnits()
+    -- add unit set
+    self.UnitSetShield = SET_UNIT:New():FilterActive():FilterPrefixes(self.TableShieldUnitNamePrefixes):FilterOnce()
+
+    self.UnitSetFortress = SET_UNIT:New():FilterActive():FilterPrefixes(self.TableFortressNamePrefixes):FilterOnce()
+
+    -- update fortress
+    local tf = self:UpdateTable(self.TableFortress, self.UnitSetFortress)
+    for _, unit in ipairs(tf) do
+        self:AddFortress(unit)
+    end
+
+    -- update shield unit
+    local ts = self:UpdateTable(self.TableShieldUnit, self.UnitSetShield)
+    -- env.info("solar-debug: #ts" .. tostring(#ts))
+    for _, unit in ipairs(ts) do
+        self:AddShieldUnit(unit)
     end
 end
 
+-- add set_unit into table
+function SOLAR_STORM:UpdateTable(TableUnit, SetUnit)
+    local t_toadd = {}
+    for _, p_unit in ipairs(SetUnit:GetSetObjects()) do
+        local isAlready = false
+        if TableUnit then
+            for _, t_unit in ipairs(TableUnit) do
+                if t_unit.Unit:Name() == p_unit:Name() then
+                    isAlready = true
+                    break
+                end
+            end
+        end
+
+        if not isAlready then
+            -- env.info("solar-debug: Adding unit in update table " .. p_unit:GetName())
+            table.insert(t_toadd, p_unit)
+        end
+    end
+
+    -- env.info("solar-debug #t_toadd: " .. tostring(#t_toadd))
+
+    return t_toadd
+end
+
+-- add fortress into table
+function SOLAR_STORM:AddFortress(FortressUnit, Data)
+    env.info("solar-debug: adding fortress" .. FortressUnit:GetName())
+    table.insert(self.TableFortress, FORTRESS_UNIT:New(FortressUnit, Data))
+end
+
+-- add shield unit into table
+function SOLAR_STORM:AddShieldUnit(ShieldUnit)
+    env.info("solar-debug: adding Shield Unit" .. ShieldUnit:GetName())
+    table.insert(self.TableShieldUnit, SHIELD_UNIT:New(ShieldUnit))
+end
+
+-- foreach ShieldUnit to update its status
+function SOLAR_STORM:UpdateStatus()
+
+    -- env.info("In UpdateStatus: #TableShieldUnit: " .. tostring(#self.TableShieldUnit))
+    -- update shield unit status
+    for _, unit in ipairs(self.TableShieldUnit) do
+        if self:CheckShieldUnit(unit) then
+            env.info(unit.Unit:GetName() .. " in safe zone")
+            unit:EnterSafeZone()
+        else
+            env.info(unit.Unit:GetName() .. " exit safe zone")
+            unit:ExitSafeZone()
+        end
+        -- env.info(unit.Unit:GetName() .." unit state: "..unit:GetState())
+        -- env.info(unit.Unit:GetName() .." unit shield health: "..unit.ShieldHealth)
+    end
+
+    -- show debug mode
+    if self.IsDebugMode then
+        self:ShowDebugMessage()
+    end
+end
+
+-- check ShieldUnit in protect area
 function SOLAR_STORM:CheckShieldUnit(ShieldUnit)
 
-    if SOLAR_STORM:IsState("Stopped") then
+    if self:Is("Stopped") then
         return true
     end
 
-    local isInProtected = false
-    for _, fortress in (self.TableFortress) do
-        if fortress:IsProtecting(ShieldUnit) then
+    for _, fortress in ipairs(self.TableFortress) do
+        if fortress:IsProtectingShieldUnit(ShieldUnit) then
             return true
         end
     end
 
     return false
 end
+
+-- show debug message
+function SOLAR_STORM:ShowDebugMessage()
+    local msg = ""
+    msg = msg .. "Current State: " .. self:GetState() .. "\n"
+    msg = msg .. "Current Shield Units: " .. #self.TableShieldUnit .. "\n"
+    msg = msg .. "Current Fortress Units: " .. #self.TableFortress .. "\n"
+
+    local m = MESSAGE:New(msg, 1, nil, true):ToAll()
+    return self
+end
+
+---- SOLAR STORM USER FUCTIONS END ----
 
 ---- FSM EVENTS ----
 
@@ -215,9 +375,9 @@ FORTRESS_UNIT = {
 
 -- todo:重新制订数据
 FORTRESS_UNIT.DefaultData = {1000, 1000, -1000} -- 半径,上限高度,下限高度(负数为本体向下) (单位:米)
-FORTRESS_UNIT.DefaultGroundData = {5 * 1800, 4000 / 3, -1000 / 3}
-FORTRESS_UNIT.DefaultShipData = {5 * 1800, 4000 / 3, -1000 / 3}
-FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000}
+FORTRESS_UNIT.DefaultGroundData = {5 * 1800, 4000 / 3, -1000 / 3} -- 5NM/4000ft
+FORTRESS_UNIT.DefaultShipData = {5 * 1800, 4000 / 3, -1000 / 3} -- 5nm/4000ft
+FORTRESS_UNIT.DefaultAirData = {1000, 1000, -1000} -- 1000ft/1000ft
 
 FORTRESS_UNIT.IsDefautlStart = true
 
@@ -237,7 +397,7 @@ function FORTRESS_UNIT:SetFortressData(Data)
     return self
 end
 
-function FORTRESS_UNIT:GetFortressData(FortressUnit)
+function FORTRESS_UNIT:GetDefaultFortressData(FortressUnit)
     if FortressUnit:IsGround() then
         return FORTRESS_UNIT.DefaultGroundData
     elseif FortressUnit:IsShip() then
@@ -250,21 +410,23 @@ function FORTRESS_UNIT:GetFortressData(FortressUnit)
     end
 end
 
-function FORTRESS_UNIT:IsProtecting(ShieldUnit)
+function FORTRESS_UNIT:IsProtectingShieldUnit(ShieldUnit)
     if self.Is("Protecting") then
-        local zb = ZONEBOX_UNIT:New("", self.Unit, self.Data[1], nil, self.Data[2], self.Data[3])
+        local zb =
+            ZONEBOX_UNIT:New("", self.Unit, self.FortressData[1], nil, self.FortressData[2], self.FortressData[3])
         if zb:IsUnitInBox(ShieldUnit.Unit) then
-            if fortress:IsProtecting() then
-                return true
-            end
+            return true
         end
     end
     return false
 end
 
-function FORTRESS_UNIT:New(FortressUnit)
+function FORTRESS_UNIT:New(FortressUnit, FortressData)
     local self = BASE:Inherit(self, FSM:New())
     self.Unit = FortressUnit
+
+    -- set fortress unit data    
+    self:SetFortressData(FortressData or FORTRESS_UNIT:GetDefaultFortressData(FortressUnit))
 
     --- FSM INIT ---    
     -- Start State.
@@ -279,12 +441,12 @@ function FORTRESS_UNIT:New(FortressUnit)
     self:AddTransition("Stopped", "Start", "Protecting")
     self:AddTransition("Protecting", "Stop", "Stopped")
 
-    --- EVENT REGISTER ---
-    self:HandleEvent(EVENTS.Crash, self._OnEventCrashOrDead)
-    self:HandleEvent(EVENTS.Dead, self._OnEventCrashOrDead)
+    -- --- EVENT REGISTER ---
+    -- self:HandleEvent(EVENTS.Crash, self._OnEventCrashOrDead)
+    -- self:HandleEvent(EVENTS.Dead, self._OnEventCrashOrDead)
+
+    return self
 end
-
-
 
 -- @field 带有护盾的单位
 SHIELD_UNIT = {
@@ -307,8 +469,8 @@ SHIELD_UNIT = {
 SHIELD_UNIT.DefaultTimeInterval = 1 -- UNIT执行周期
 SHIELD_UNIT.DefaultMessageDuration = 15 -- 一般信息的显示时长
 
-SHIELD_UNIT.DefaultShieldHealth = 600 -- 护盾能量值
-SHIELD_UNIT.DefualtBoomHealth = -300 -- 机体受损的护盾阈值
+SHIELD_UNIT.DefaultShieldHealth = 600 -- 护盾能量值(10min)
+SHIELD_UNIT.DefualtBoomHealth = -300 -- 机体受损的护盾阈值(5min)
 SHIELD_UNIT.DefaultSShieldSpeedConsume = 1 -- 护盾消耗速率（/秒）
 SHIELD_UNIT.DefaultSShieldSpeedRecovery = 15 -- 护盾回复速率（/秒）
 
@@ -325,6 +487,13 @@ SHIELD_UNIT.UnitTypeExplodePower = -- 各机型的受损爆炸当量
     Mudhen = 1.6, -- F-15E:损坏单发引擎
     Viper = 0.7, -- F-16:损坏通讯天线
     Dragon = 0.15 -- JF-17:损坏部分航电,后续影响未明
+}
+
+SHIELD_UNIT.ShieldStatusShow = {
+    ["Recovering"] = "...未激活...",
+    ["Protecting"] = "..护盾消耗中..",
+    ["Damaging"] = ".护盾耗尽,机体受损!.",
+    ["Damaged"] = ".你的坤儿已经炸啦!."
 }
 
 --- SHIELD Settings End ---
@@ -352,6 +521,56 @@ function SHIELD_UNIT:MessageNotify(Message, Duration, Name)
     return self
 end
 
+function SHIELD_UNIT:GenerateShieldBar(Health)
+
+    local solidSymbol = "■"
+    local emptySymbol = "□"
+
+    if Health < 0 then
+        Health = 0
+    elseif Health > self.DefaultShieldHealth then
+        Health = self.DefaultShieldHealth
+    end
+
+    local maxBars = 20
+    local percentage = (self.DefaultShieldHealth - Health) / self.DefaultShieldHealth
+
+    local solidBars = math.max(1, math.floor(maxBars * (1 - percentage)))
+    local emptyBars = maxBars - solidBars
+
+    if Health == 0 then
+        solidBars = 0
+        emptyBars = maxBars
+    end
+
+    local result = ""
+
+    for i = 1, solidBars do
+        result = result .. solidSymbol
+    end
+
+    for i = 1, emptyBars do
+        result = result .. emptySymbol
+    end
+
+    return result
+end
+
+function SHIELD_UNIT:ShowShieldStatus()
+    if self.Unit:IsClient() then
+        -- =============================
+        -- 护盾能量: ■■■■■■■■■■■■■■■■■■■■
+        local msg = "========= 电磁护盾监控 ============\n"
+        msg = msg .. "护盾状态: " .. SHIELD_UNIT.ShieldStatusShow[self:GetState()] .. "\n"
+        msg = msg .. "护盾能量: " .. self:GenerateShieldBar(self.ShieldHealth) .. "\n"
+        msg = msg .. "=============================="
+        -- msg = msg .. "护盾状态: " .. self:GetState() .. "\n"
+        -- msg = msg .. "护盾能量: " .. self.ShieldHealth
+
+        MESSAGE:New(msg, self.DefaultTimeInterval, nil, true):ToClient(self.Unit:GetClient())
+    end
+end
+
 --- User Functions End ---
 
 function SHIELD_UNIT:New(ShieldUnit)
@@ -377,15 +596,14 @@ function SHIELD_UNIT:New(ShieldUnit)
 
     -- Add FSM transitions.
     -- From State --> Event --> To State
-    self:AddTransition("Init", "Start", "Recovering") -- 护盾被激活
+    self:AddTransition("Init", "Start", "Recovering") -- 护盾初始化
     self:AddTransition("Recovering", "ExitSafeZone", "Protecting") -- 护盾被激活
     self:AddTransition({"Protecting", "Damaging"}, "EnterSafeZone", "Recovering") -- 护盾被回复
 
     self:AddTransition("*", "Exhaust", "Damaging") -- 机体受损中 -- for fsm test
     -- self:AddTransition("Protecting", "Exhaust", "Damaging") -- 机体受损中
 
-    self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损
-    -- self:AddTransition("*", "CheckStatus", "*") -- 过程控制事件
+    self:AddTransition("Damaging", "Boom", "Damaged") -- 机体破损    
 
     self.TimerCheckStatus = TIMER:New(function()
         self:CheckStatus()
@@ -431,7 +649,7 @@ end
 ------------------
 
 function SHIELD_UNIT:CheckStatus()
-    -- 初始化
+    -- 初始化    
     -- TODO: 补充初始化说明信息
     if self:Is("Init") then
         self:Start()
@@ -455,7 +673,7 @@ function SHIELD_UNIT:CheckStatus()
         -- 护盾值消耗
         self.ShieldHealth = self.ShieldHealth - self.ShieldSpeedConsume * self.dTstatus
 
-        if self.ShieldHealth <= 0 then
+        if self.ShieldHealth < 0 then
             self:Exhaust()
         end
 
@@ -470,6 +688,14 @@ function SHIELD_UNIT:CheckStatus()
             self:Boom()
         end
     end
+
+    -- show status
+    self:ShowShieldStatus()
+    -- env.info("In CheckStatus")
+    -- env.info(self.Unit:GetName() .." unit state: "..self:GetState())
+    -- env.info(self.Unit:GetName() .." unit shield health: "..self.ShieldHealth)
     return self
 end
+
+env.info("== End Solar Storm Loading ==")
 
