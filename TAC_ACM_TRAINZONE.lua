@@ -133,9 +133,9 @@ function TAC_ACM_TRAINZONE:Status()
             self:ShowMessage("导演部: " .. self.ZoneTraining:GetName() .. " 净空, 可以进入机组训练", false,
                 true)
             self:ZoneClear()
-            else
-                self:ShowMessage("导演部: " .. self.ZoneTraining:GetName() .. " 空域尚未清空, 所有机组请先退出该空域.", false,
-                true)
+        else
+            self:ShowMessage("导演部: " .. self.ZoneTraining:GetName() ..
+                                 " 空域尚未清空, 所有机组请先退出该空域.", false, true)
         end
     end
 
@@ -187,12 +187,12 @@ function TAC_ACM_TRAINZONE:OnBeforeEnemySpawn(From, Event, To)
     self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
 
     -- delay radar open
-    if self.EnemyEmissionOpenDelay >0 then 
+    if self.EnemyEmissionOpenDelay > 0 then
         self.GroupEnemy:EnableEmission(false)
-        local timer_emssion = TIMER:New(function ()
-            self.GroupEnemy:EnableEmission(true)            
+        local timer_emssion = TIMER:New(function()
+            self.GroupEnemy:EnableEmission(true)
         end):Start(self.EnemyEmissionOpenDelay)
-    end    
+    end
 
     self.GroupEnemy:HandleEvent(EVENTS.Kill, function()
         self:ShowMessage("GoodKill~")
