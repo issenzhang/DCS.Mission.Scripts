@@ -1,0 +1,1 @@
+local tz1 = TAC_ACM_TRAINZONE:New("TRAINZONE-1")

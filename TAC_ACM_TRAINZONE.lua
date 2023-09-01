@@ -8,33 +8,41 @@ TAC_ACM_TRAINZONE = {
 
 -- todo:confirm template name
 TAC_ACM_TRAINZONE.EnemyTemplateName = "EnemyTemplate"
+TAC_ACM_TRAINZONE.TableEnemyTemplate = {"enemy-f5-highvis", "enemy-f5-lowvis", "enemy-f16-highvis", "enemy-f16-lowvis"}
 
-TAC_ACM_TRAINZONE.TableSpawnAlt = {
-    ["low"] = 1000 / 3,
-    ["med"] = 15000 / 3,
-    ["high"] = 30000 / 3
-}
+-- TAC_ACM_TRAINZONE.TableSpawnAlt = {
+--     low = 1000 ,
+--     med = 15000 ,
+--     high = 30000
+-- }
 
-TAC_ACM_TRAINZONE.TableSpawnBRA = {
-    -- [type name] = {left_angle},right_angle}
-    ["hot"] = {0, 0},
-    ["flank"] = {45, 360 - 45},
-    ["beam"] = {90, 360 - 90},
-    ["drag"] = {120, 360 - 120}
-    -- ["cold"] = {180, 180}
-}
+-- -- [type name] = {left_angle},right_angle}
+-- TAC_ACM_TRAINZONE.TableSpawnBRAType = {
+--     hot = 0,
+--     flank = 45,
+--     beam = 90,
+--     drag = 120,
+--     cold = 180,
+-- }
+
+TAC_ACM_TRAINZONE.TableSpawnAlt = {1000, 15000, 30000}
+
+-- [type name] = {left_angle},right_angle}
+TAC_ACM_TRAINZONE.TableSpawnBRAType = {0, 45, 90, 120, 180}
 
 -- spawn distance = abs(spawn_bra-180) * SpawnDistance_K + SpawnDistance_At180
 TAC_ACM_TRAINZONE.SpawnDistance_At180 = 10
 TAC_ACM_TRAINZONE.SpawnDistance_K = (20 - TAC_ACM_TRAINZONE.SpawnDistance_At180) / 180
 
-TAC_ACM_TRAINZONE.SpawnDelayMin = 60
-TAC_ACM_TRAINZONE.SpawnDelayMax = 180
+TAC_ACM_TRAINZONE.SpawnDelayMin = 10
+TAC_ACM_TRAINZONE.SpawnDelayMax = 30
 
 TAC_ACM_TRAINZONE.MaxTrainWaves = 3
 TAC_ACM_TRAINZONE.EnemyDestoryDelay = 30
 
 TAC_ACM_TRAINZONE.EnemyEmissionOpenDelay = 30
+
+TAC_ACM_TRAINZONE.IsDebugMessage = true
 
 ---  Parameters End---
 
@@ -50,16 +58,17 @@ TAC_ACM_TRAINZONE.TrainWaves = nil
 
 --- functions ---
 function TAC_ACM_TRAINZONE:ShowMessage(Message, Duration, isClean, isToAll, ToGroup)
-    local msg = MESSAGE:New(Message, Duration or 15, nil, true)
+    local msg = MESSAGE:New(self:GetState() .. Message, Duration or 15, nil, true)
 
-    if isToAll or false then
+    if isToAll or self.IsDebugMessage then
+        msg:ToAll()
+    else
         if ToGroup then
             msg:ToGroup(ToGroup)
         else
             msg:ToGroup(self.GroupTrain)
         end
-    else
-        msg:ToAll()
+
     end
 end
 
@@ -85,12 +94,22 @@ function TAC_ACM_TRAINZONE:New(ZoneName)
         self:Status()
     end):Start(0, 5)
 
+    self.ZoneTraining:DrawZone(-1, -- for all
+    {1, 1, 1}, -- white
+    0.5, -- line Transparency 
+    {255, 255, 255}, -- fill color
+    0.5 -- fill Transparency
+    )
+
     return self
 end
 
 function TAC_ACM_TRAINZONE:Status()
 
-    if self.Is("Idle") then
+    -- for debug
+    -- env.info("tacacm debug: now status: ".. self:GetState())
+
+    if self:Is("Idle") then
         local groups = SET_GROUP:New():FilterCoalitions("blue"):FilterCategoryAirplane()
             :FilterZones({self.ZoneTraining}):FilterOnce():GetSetObjects()
 
@@ -119,14 +138,14 @@ function TAC_ACM_TRAINZONE:Status()
         end
     end
 
-    if self.Is("Training") or self.Is("EnemySpawn") then
+    if self:Is("Training") or self:Is("EnemySpawn") then
         if not self.GroupTrain.IsCompletelyInZone(self.ZoneTraining) then
             self:ShowMessage("导演部: 你机队出界,训练终止.")
             self:KnockItOff()
         end
     end
 
-    if self.Is("Finishing") then
+    if self:Is("Finishing") then
         local count = SET_GROUP:New():FilterCoalitions("blue"):FilterCategoryAirplane():FilterZones({self.ZoneTraining})
             :FilterOnce():CountAlive()
         if count == 0 then
@@ -142,20 +161,40 @@ function TAC_ACM_TRAINZONE:Status()
     return self
 end
 
+function TAC_ACM_TRAINZONE:OnEnterIdle(From, Event, To)
+    self.ZoneTraining:DrawZone(-1, -- for all
+    {1, 1, 1}, -- white
+    0.5, -- line Transparency 
+    {1, 1, 1}, -- fill color
+    0.5 -- fill Transparency
+    )
+    return true
+end
+
 function TAC_ACM_TRAINZONE:OnEnterTraining(From, Event, To)
 
     -- set train group Immortal
-    self:SetCommandImmortal(true)
+    self.GroupTrain:SetCommandImmortal(true)
 
     if self.TrainWaves > self.MaxTrainWaves then
         self:ShowMessage("导演部: 你机队已经完成训练任务.")
-        self:SetCommandImmortal(false)
-        self:Complate()
+        self.GroupTrain:SetCommandImmortal(false)
+        self:Complate(5)
+
+        return false
     else
-        self:ShowMessage("导演部: 训练开始/继续.敌机将会刷新,注意保持瞭望.")
         self.TrainWaves = self.TrainWaves + 1
-        self:EnemySpawn(math.random(self.SpawnDelayMin, self.SpawnDelayMax))
+        self:ShowMessage("导演部: 训练开始/继续.敌机将会刷新,注意保持瞭望." ..
+                             tostring(self.TrainWaves))
+        self:__EnemySpawn(math.random(self.SpawnDelayMin, self.SpawnDelayMax))
     end
+
+    self.ZoneTraining:DrawZone(-1, -- for all
+    {1, 1, 1}, -- white
+    0.5, -- line Transparency 
+    {1, 0, 0}, -- fill color
+    0.5 -- fill Transparency
+    )
 
     return true
 end
@@ -166,13 +205,22 @@ function TAC_ACM_TRAINZONE:OnBeforeEnemySpawn(From, Event, To)
     -- https://flightcontrol-master.github.io/MOOSE_DOCS/Documentation/Wrapper.Group.html
     -- https://flightcontrol-master.github.io/MOOSE_DOCS/Documentation/Core.Spawn.html    
 
-    local bra_spawn = UTILS.GetRandomTableElement(UTILS.GetRandomTableElement(self.TableSpawnBRA))
-    local distance_spawn = self.SpawnDistance_At180 + math.abs(bra_spawn - 180) * self.SpawnDistance_K
-    local alt_spawn = UTILS.GetRandomTableElement(self.TableSpawnAlt)
+    local bra_degree = GetRandomTableElement(self.TableSpawnBRAType)
+
+    math.random()
+    math.random()
+    math.random()
+
+    if math.random(2) == 1 then
+        local bra_degree = 360 - bra_degree
+    end
+
+    local distance_spawn = self.SpawnDistance_At180 + math.abs(bra_degree - 180) * self.SpawnDistance_K
+    local alt_spawn = GetRandomTableElement(self.TableSpawnAlt)
 
     local zoneSpawn = ZONE_UNIT:New("spawn", self.GroupTrain:GetUnits()[1], 10, {
-        rho = distance_spawn,
-        theta = bra_spawn,
+        rho = distance_spawn * 1800,
+        theta = bra_degree,
         relative_to_unit = true
     })
 
@@ -180,8 +228,10 @@ function TAC_ACM_TRAINZONE:OnBeforeEnemySpawn(From, Event, To)
     local pos_zone = zoneSpawn:GetCoordinate()
     local heading_spawn = pos_zone:HeadingTo(pos_group)
 
-    self.GroupEnemy = SPAWN:New("TEMPLATE"):InitHeading(heading_spawn):InitSkill("Excellent"):SpawnInZone(zoneSpawn,
-        alt_spawn, alt_spawn + 500)
+    local type_spawn = GetRandomTableElement(self.TableEnemyTemplate)
+
+    self.GroupEnemy = SPAWN:New(type_spawn):InitHeading(heading_spawn):InitSkill("Excellent"):SpawnInZone(zoneSpawn,
+        alt_spawn, alt_spawn + 1000)
 
     -- add task
     self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
@@ -194,7 +244,7 @@ function TAC_ACM_TRAINZONE:OnBeforeEnemySpawn(From, Event, To)
         end):Start(self.EnemyEmissionOpenDelay)
     end
 
-    self.GroupEnemy:HandleEvent(EVENTS.Kill, function()
+    self.GroupEnemy:HandleEvent(EVENTS.Crash, function()
         self:ShowMessage("GoodKill~")
         self:KillEnemy()
     end)
@@ -205,7 +255,7 @@ end
 function TAC_ACM_TRAINZONE:OnBeforeKnockItOff(From, Event, To)
 
     self:ShowMessage("退出训练空域重置, 或直接返回机场")
-    self:SetCommandImmortal(false)
+    self.GroupTrain:SetCommandImmortal(false)
     if self.GroupEnemy then
         self.GroupEnemy:Destroy(false, self.EnemyDestoryDelay)
     end
@@ -213,3 +263,10 @@ function TAC_ACM_TRAINZONE:OnBeforeKnockItOff(From, Event, To)
     return true
 end
 
+function GetRandomTableElement(table)
+    math.random()
+    math.random()
+    math.random()
+
+    return table[math.random(#table)]
+end
