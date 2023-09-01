@@ -4,7 +4,7 @@ local script_list =
 {
     -- Load order must be correct
     "Moose.lua",    
-    "TAC_ACM_TRAINZONE.lua",
+    "TF_TRAINZONE.lua",
     "Tac-ACM.lua"
 }
 
