@@ -124,8 +124,10 @@ function TF_TRAINZONE:Status()
 
     -- check outbound
     if self:Is("Training") or self:Is("ThreatSpawned") then
-        if self.GroupTrain:IsCompletelyInZone(self.ZoneTraining) == false then
-            self:ShowMessage("导演部: 你机队出界,训练终止.")
+        local isNotInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
+        local isNotAliveCount = self.GroupTrain:CountAliveUnits()
+        if isNotInZone == false or isNotAliveCount ~= 2 then
+            self:ShowMessage("导演部: 你机队出界或者人数不足,训练终止.")
             self:AbortOrFinish()
         end
     end
@@ -138,6 +140,17 @@ function TF_TRAINZONE:Status()
                 self.SpawnTicker = 0
                 self:EnemySpawn()
             end
+        end
+    end
+
+    -- enemy check
+    if self:Is("ThreatSpawned") then
+        if self.GroupEnemy then
+            if self.GroupEnemy:CountAliveUnits() == 0 then
+                self:AllKilled()
+            end
+        else
+            self:AllKilled()
         end
     end
 
@@ -207,6 +220,7 @@ function TF_TRAINZONE:SpawnEnemy()
     --
     -- add task
     self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
+    self.GroupEnemy:PushTask()
 end
 
 function TF_TRAINZONE:OnEnterIdle(From, Event, To)
@@ -276,23 +290,39 @@ function TF_TRAINZONE:OnEventHit(EventData)
     end
 end
 
-function TF_TRAINZONE:OnEventCrash(EventData)
-    if self:Is("ThreatSpawned") then
-        if self.GroupEnemy then
-            local group = EventData.TgtGroup
-            if group.GroupName == self.GroupEnemy.GroupName then
-                self:ShowMessage("GoodKill~ GoodKill~")
-                self.TrainWavesFinished = self.TrainWavesFinished + 1
-                if self.IsEndlessMode or self.TrainWavesFinished < self.MaxTrainWavesFinished then
-                    self.GroupEnemy = nil
-                    self:EnemyDisarm()
-                elseif self.TrainWavesFinished >= self.MaxTrainWavesFinished then
-                    self:ShowMessage("你机队已经完成训练.")
-                    self:AbortOrFinish()
-                end
-            end
-        end
+function TF_TRAINZONE:AllKilled()
+    self:ShowMessage("GoodKill~ GoodKill~")
+    self.TrainWavesFinished = self.TrainWavesFinished + 1
+    if self.IsEndlessMode or self.TrainWavesFinished < self.MaxTrainWavesFinished then
+        -- continue spawn
+        self.GroupEnemy = nil
+        self:EnemyDisarm()
+    elseif self.TrainWavesFinished >= self.MaxTrainWavesFinished then
+        self:ShowMessage("你机队已经完成训练.")
+        self:AbortOrFinish()
     end
+end
+
+function TF_TRAINZONE:OnEventCrash(EventData)
+    env.info("==CRASH EVENT==")
+    env.info("ini group:" .. EventData.IniGroup.GroupName)
+    env.info("tgt group:" .. EventData.TgtGroup.GroupName)
+    --    if self:Is("ThreatSpawned") then
+    --        if self.GroupEnemy then
+    --            local group = EventData.TgtGroup
+    --            if group.GroupName == self.GroupEnemy.GroupName then
+    --                self:ShowMessage("GoodKill~ GoodKill~")
+    --                self.TrainWavesFinished = self.TrainWavesFinished + 1
+    --                if self.IsEndlessMode or self.TrainWavesFinished < self.MaxTrainWavesFinished then
+    --                    self.GroupEnemy = nil
+    --                    self:EnemyDisarm()
+    --                elseif self.TrainWavesFinished >= self.MaxTrainWavesFinished then
+    --                    self:ShowMessage("你机队已经完成训练.")
+    --                    self:AbortOrFinish()
+    --                end
+    --            end
+    --        end
+    --    end
 end
 
 function GetRandomTableElement(table)
