@@ -12,20 +12,24 @@ TF_TRAINZONE.IsSpawnEmeny = true
 TF_TRAINZONE.IsEndlessMode = false
 TF_TRAINZONE.MaxTrainWavesFinished = 3
 
+TF_TRAINZONE.IsSmartSpawn = true
+
 -- TF_TRAINZONE.EnemyTemplateName = "EnemyTemplate"
 TF_TRAINZONE.TableEnemyTemplate = { -- "enemy-f5-highvis", --"enemy-f5-lowvis",
-"enemy-f16-highvis", "enemy-f16-lowvis"}
+"enemy-f16-highvis", "enemy-f16-lowvis","enemy-f16-lowvis-15","enemy-f16-lowvis-30"}
 TF_TRAINZONE.TableSpawnAlt = {1000, 15000, 30000} -- spawn enemy alt (meters)
-TF_TRAINZONE.TableSpawnBRA = {0} -- , 45, 90, 120, 180}
+TF_TRAINZONE.TableSpawnBRA = {0, 45, 90, 120, 180}
 -- spawn distance = abs(spawn_bra-180) * SpawnDistance_K + SpawnDistance_At180
 TF_TRAINZONE.SpawnDistance_At180 = 8 -- spawn distance when @cold
 TF_TRAINZONE.SpawnDistance_At0 = 20 -- spawn distance when @hot
 TF_TRAINZONE.SpawnDistance_K = (TF_TRAINZONE.SpawnDistance_At0 - TF_TRAINZONE.SpawnDistance_At180) / 180
-TF_TRAINZONE.SpawnDelayMin = 10
-TF_TRAINZONE.SpawnDelayMax = 15
+TF_TRAINZONE.SpawnDelayMin = 60
+TF_TRAINZONE.SpawnDelayMax = 240
 
 TF_TRAINZONE.EnemyDestoryDelay = 30
 TF_TRAINZONE.EnemyEmissionOpenDelay = 30
+
+TF_TRAINZONE.OutboundMaxDuration = 90
 
 ---  Parameters End---
 
@@ -39,6 +43,8 @@ TF_TRAINZONE.TrainWavesFinished = nil
 
 TF_TRAINZONE.SpawnTicker = 0
 TF_TRAINZONE.SpawnTickerTrigger = 0
+
+TF_TRAINZONE.OutboundTicker = 0
 
 --- values end ---
 
@@ -76,8 +82,12 @@ function TF_TRAINZONE:New(ZoneName)
 
     self:AddTransition("Idle", "EnterZone", "Training")
     self:AddTransition("Training", "EnemySpawn", "ThreatSpawned")
+
+    self:AddTransition("Training", "Outbound", "Outbounded")
+    self:AddTransition("Outbounded", "ReturnZone", "Training")
+
     self:AddTransition("ThreatSpawned", "EnemyDisarm", "Training")
-    self:AddTransition({"Training", "ThreatSpawned"}, "AbortOrFinish", "ZoneClearUp")
+    self:AddTransition({"Training", "ThreatSpawned", "Outbounded"}, "AbortOrFinish", "ZoneClearUp")
     self:AddTransition("ZoneClearUp", "ZoneClear", "Idle")
 
     self.TimerTraining = TIMER:New(function()
@@ -109,11 +119,6 @@ function TF_TRAINZONE:Status()
                     -- reset train waves
                     self.TrainWavesFinished = 0
 
-                    -- -- register hit event
-                    -- self.GroupTrain:HandleEvent(EVENTS.Hit, function()
-                    --     self:ShowMessage("导演部: 你机队被命中,训练终止.")
-                    --     self:AbortOrFinish()
-                    -- end)
                 else
                     self:ShowMessage("导演部: 单机队必须2人同时进入该空域, 才能启动训练" ..
                                          tostring(countAlive) .. "//" .. tostring(isInZone), nil, nil, nil, group)
@@ -122,18 +127,24 @@ function TF_TRAINZONE:Status()
         end
     end
 
-    -- check outbound
-    if self:Is("Training") or self:Is("ThreatSpawned") then
-        local isNotInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
+    if self:Is("Training") or self:Is("ThreatSpawned") or self:Is("Outbounded") then
+        local isAllInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
         local isNotAliveCount = self.GroupTrain:CountAliveUnits()
-        if isNotInZone == false or isNotAliveCount ~= 2 then
+        if isNotAliveCount ~= 2 then
             self:ShowMessage("导演部: 你机队出界或者人数不足,训练终止.")
             self:AbortOrFinish()
         end
     end
 
-    -- spawn enemy
     if self:Is("Training") then
+
+        -- check outbound
+        local isAllInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
+        if isAllInZone == false then
+            self:Outbound()
+        end
+
+        -- spawn enemy
         if self.IsSpawnEmeny then
             self.SpawnTicker = self.SpawnTicker + self.TimerStep
             if (self.SpawnTicker >= self.SpawnTickerTrigger) then
@@ -143,16 +154,36 @@ function TF_TRAINZONE:Status()
         end
     end
 
-    -- enemy check
-    if self:Is("ThreatSpawned") then
-        if self.GroupEnemy then
-            if self.GroupEnemy:CountAliveUnits() == 0 then
-                self:AllKilled()
-            end
+    if self:Is("Outbounded") then
+        local isAllInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
+        if isAllInZone == true then
+            self:ReturnZone()
         else
-            self:AllKilled()
+            self.OutboundTicker = self.OutboundTicker + self.TimerStep
+            if self.OutboundTicker > self.OutboundMaxDuration then
+                self:ShowMessage("导演部: 你机队出界时间超时,训练终止.")
+                self:AbortOrFinish()
+            else
+                self:ShowMessage("导演部: 你机队已经出界,尽快返回训练区域.\n剩余时间:" ..
+                                     tostring(self.OutboundMaxDuration - self.OutboundTicker) .. "s.")
+            end
         end
     end
+
+    -- -- enemy check
+    -- if self:Is("ThreatSpawned") then
+    --     if self.GroupEnemy then
+    --         if not self.GroupEnemy:IsAlive() then
+    --             env.info(self.GroupEnemy.GroupName)
+    --             env.info(self.GroupEnemy:IsAlive())
+    --             env.info("All kill cause 0")
+    --             self:AllKilled()
+    --         end
+    --     else
+    --         env.info("All kill cause None")
+    --         self:AllKilled()
+    --     end
+    -- end
 
     -- check cleanup
     if self:Is("ZoneClearUp") then
@@ -175,28 +206,34 @@ function TF_TRAINZONE:SpawnEnemy()
     -- https://flightcontrol-master.github.io/MOOSE_DOCS/Documentation/Core.Spawn.html    
 
     -- do spawm enemy parameters
-    local bra_degree = GetRandomTableElement(self.TableSpawnBRA)
-    if math.random(2) == 1 then
-        local bra_degree = 360 - bra_degree
-    end
-
-    local distance_spawn = self.SpawnDistance_At180 + math.abs(bra_degree - 180) * self.SpawnDistance_K
+    local bra_degree = 0
+    local distance_spawn = 8
     local alt_spawn = GetRandomTableElement(self.TableSpawnAlt)
-
-    local zoneSpawn = ZONE_UNIT:New("spawn", self.GroupTrain:GetUnits()[1], 10, {
-        rho = distance_spawn * 1800,
-        theta = bra_degree,
-        relative_to_unit = true
-    })
-
-    local pos_group = self.GroupTrain:GetCoordinate()
-    local pos_zone = zoneSpawn:GetCoordinate()
-    local heading_spawn = pos_zone:HeadingTo(pos_group)
-
     local type_spawn = GetRandomTableElement(self.TableEnemyTemplate)
 
-    self.GroupEnemy = SPAWN:New(type_spawn):InitHeading(heading_spawn):InitSkill("Excellent"):SpawnInZone(zoneSpawn,
-        alt_spawn, alt_spawn + 1000)
+    if self.IsSmartSpawnPosition then
+        bra_degree = GetRandomTableElement(self.TableSpawnBRA)
+        if math.random(2) == 1 then
+            local bra_degree = 360 - bra_degree
+        end
+        distance_spawn = self.SpawnDistance_At180 + math.abs(bra_degree - 180) * self.SpawnDistance_K
+        local zoneSpawn = ZONE_UNIT:New("spawn", self.GroupTrain:GetUnits()[1], 10, {
+            rho = distance_spawn * 1800,
+            theta = bra_degree,
+            relative_to_unit = true
+        })
+        local pos_group = self.GroupTrain:GetCoordinate()
+        local pos_zone = zoneSpawn:GetCoordinate()
+        local heading_spawn = pos_zone:HeadingTo(pos_group)
+
+        self.GroupEnemy = SPAWN:New(type_spawn):InitHeading(heading_spawn):InitSkill("Excellent"):SpawnInZone(zoneSpawn,
+            alt_spawn, alt_spawn + 1000)
+
+        env.info("Enemy Spawned:" .. type_spawn .. "/" .. tostring(distance_spawn) .. "/@" ..
+                     tostring(bra_degree .. "km/alt:" .. tostring(alt_spawn)))
+    else
+        self.GroupEnemy = SPAWN:New(type_spawn):InitSkill("Excellent"):SpawnInZone(self.ZoneTraining, true, 12000)
+    end
 
     -- delay enemy radar open
     if self.EnemyEmissionOpenDelay > 0 then
@@ -206,33 +243,33 @@ function TF_TRAINZONE:SpawnEnemy()
         end):Start(self.EnemyEmissionOpenDelay)
     end
 
-    --   -- register crash event
-    --   self.GroupEnemy:HandleEvent(EVENTS.Crash, function()
-    --       self:ShowMessage("GoodKill~ GoodKill~")
-    --       self.TrainWavesFinished = self.TrainWavesFinished + 1
-    --       if self.IsEndlessMode or self.TrainWavesFinished < self.MaxTrainWavesFinished then
-    --           self:EnemyDisarm()
-    --       elseif self.TrainWavesFinished >= self.MaxTrainWavesFinished then
-    --           self:ShowMessage("你机队已经完成训练.")
-    --           self:AbortOrFinish()
-    --       end
-    --   end)
+    -- register crash event
+    self.GroupEnemy:HandleEvent(EVENTS.Crash, function()
+        self:ShowMessage("GoodKill~ GoodKill~")
+        self.TrainWavesFinished = self.TrainWavesFinished + 1
+        if self.IsEndlessMode or self.TrainWavesFinished < self.MaxTrainWavesFinished then
+            self:EnemyDisarm()
+        elseif self.TrainWavesFinished >= self.MaxTrainWavesFinished then
+            self:ShowMessage("你机队已经完成训练.")
+            self:AbortOrFinish()
+        end
+    end)
     --
     -- add task
     self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
-    self.GroupEnemy:PushTask()
+    -- self.GroupEnemy:PushTask()
 end
 
 function TF_TRAINZONE:OnEnterIdle(From, Event, To)
     self:ShowMessage("导演部: " .. self.ZoneTraining:GetName() .. " 净空, 可以进入机组训练", nil, false,
         true)
-    self.ZoneTraining:SetFillColor({1, 1, 1}, 0.5)
+    self.ZoneTraining:DrawZone(-1, {0, 1, 0}, 0.8, nil, nil, 1, false)
     return true
 end
 
 function TF_TRAINZONE:OnEnterTraining(From, Event, To)
 
-    self.ZoneTraining:SetFillColor({1, 0, 0}, 0.5)
+    self.ZoneTraining:DrawZone(-1, {1, 0, 0}, 0.8, nil, nil, 1, false)
 
     -- set train group Immortal
     self.GroupTrain:SetCommandImmortal(true)
@@ -267,6 +304,7 @@ function TF_TRAINZONE:OnBeforeAbortOrFinish(From, Event, To)
     self:ShowMessage("退出训练空域以重置训练, 或直接返回机场")
 
     if self.GroupEnemy then
+        env.info("ta_train: do enemy Destroy")
         self.GroupEnemy:Destroy(false, self.EnemyDestoryDelay)
     end
 
