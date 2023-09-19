@@ -1,0 +1,2 @@
+local aar1 = AAR_TRAIN:New("T-TEXACO","AAR-TEXACO",1,20,150.000)
+local aar2 = AAR_TRAIN:New("T-ARCO","AAR-ARCO",2,40,180.000)

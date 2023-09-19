@@ -143,14 +143,16 @@ function HELPER.MessageToGroup(Group, MessageText, Duration, IsClear, IsSound)
         local groupName = Group:GetName()
         local playersName = ""
 
-        for _, pn in ipairs(Group:GetPlayerNames()) do
-            playersName = playersName .. "/" .. pn
+        if Group:GetPlayerNames() then
+            for _, pn in ipairs(Group:GetPlayerNames()) do
+                playersName = playersName .. "/" .. pn
+            end
+            playersName = string.sub(playersName, 2)
         end
-        playersName = string.sub(playersName, 2)
 
-        local Text = "Group "..groupName .. " (" .. playersName .. "):\n" .. MessageText
+        local Text = "Group " .. groupName .. " (" .. playersName .. "):\n" .. MessageText
         env.info("Helper: Message to group:\n" .. Text)
-        MESSAGE:New(Text, Duration, nil, IsClear):ToGroup()
+        MESSAGE:New(Text, Duration, nil, IsClear):ToGroup(Group)
 
         if IsSound then
             USERSOUND:New(HELPER.SoundFileName):ToGroup(Group)
