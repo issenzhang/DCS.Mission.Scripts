@@ -27,7 +27,7 @@
 --   - GroupEnemy：敌人飞机组。
 --   - TimerTraining：训练计时器。
 --   - TrainWavesFinished：已完成的训练波数。
---   - SpawnTicker：生成敌人的计时器。
+--   - SpawnTicker：生成敌人的计时器。0
 --   - SpawnTickerTrigger：生成敌人的计时触发值。
 --   - OutboundTicker：出界计时器。
 -- 主要函数包括：
@@ -147,7 +147,7 @@ function TFM_TRAINZONE:ShowMessage(Message, Duration, IsClean, IsToAll, ToGroup)
 
     local msg = MESSAGE:New(self:GetState() .. Message, Duration or 15, nil, IsClean)
 
-    if isToAll or self.IsDebugMessage then
+    if IsToAll or self.IsDebugMessage then
         msg:ToAll()
     else
         if ToGroup then
@@ -211,7 +211,7 @@ function TFM_TRAINZONE:Status()
                     self.TrainWavesFinished = 0
 
                 else
-                    self:ShowMessage("导演部: 单机队必须2人同时进入该空域, 才能启动训练" ..
+                    self:ShowMessage("导演部: 机队必须同时进入该空域, 才能启动训练" ..
                                          tostring(countAlive) .. "//" .. tostring(isInZone), nil, nil, nil, group)
                 end
             end
@@ -219,7 +219,7 @@ function TFM_TRAINZONE:Status()
     end
 
     if self:Is("Training") or self:Is("ThreatSpawned") or self:Is("Outbounded") then
-        local isAllInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
+        -- local isAllInZone = self.GroupTrain:IsCompletelyInZone(self.ZoneTraining)
         local isNotAliveCount = self.GroupTrain:CountAliveUnits()
         if isNotAliveCount == 0 then
             self:ShowMessage("导演部: 你机队出界或者人数不足,训练终止.")
@@ -304,7 +304,7 @@ function TFM_TRAINZONE:SpawnEnemy()
     local alt_spawn = GetRandomTableElement(self.TableSpawnAlt)
     local type_spawn = GetRandomTableElement(self.TableEnemyTemplate)
 
-    if self.IsSmartSpawnPosition then
+    if self.IsSmartSpawn then
         bra_degree = GetRandomTableElement(self.TableSpawnBRA)
         if math.random(2) == 1 then
             local bra_degree = 360 - bra_degree
