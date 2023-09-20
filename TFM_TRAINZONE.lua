@@ -104,14 +104,15 @@ TFM_TRAINZONE.IsSpawnEmeny = true -- 是否生成敌人
 TFM_TRAINZONE.IsEndlessMode = false -- 是否无限模式
 TFM_TRAINZONE.MaxTrainWavesFinished = 3 -- 最大训练波数
 
-TFM_TRAINZONE.TableEnemyTemplate = {"enemy-f16-highvis", "enemy-f16-lowvis", "enemy-f16-lowvis-15",
-                                    "enemy-f16-lowvis-30"} -- 敌人模板列表
+--TFM_TRAINZONE.TableEnemyTemplate = {"enemy-f16-highvis-30"} -- 敌人模板列表
+TFM_TRAINZONE.TableEnemyTemplate = {"enemy-f16-highvis", "enemy-f16-lowvis", "enemy-f16-highvis-15",
+                                   "enemy-f16-highvis-30", "enemy-f16-highvis-4"} -- 敌人模板列表
 TFM_TRAINZONE.TableSpawnAlt = {1000, 15000, 30000} -- 生成敌人的高度（米） 
 TFM_TRAINZONE.TableSpawnBRA = {0, 45, 90, 120, 180} -- 生成敌人的方向（度）
 
 TFM_TRAINZONE.IsSmartSpawn = true -- 是否智能生成(根据迎击角度改变生成距离)
-TFM_TRAINZONE.SpawnDistance_At180 = 8 -- 冷启动时的生成距离
-TFM_TRAINZONE.SpawnDistance_At0 = 20 -- 热启动时的生成距离
+TFM_TRAINZONE.SpawnDistance_At180 = 6 -- 冷启动时的生成距离
+TFM_TRAINZONE.SpawnDistance_At0 = 18 -- 热启动时的生成距离
 TFM_TRAINZONE.SpawnDistance_K = 0 -- 生成距离系数(标定无用,函数内重新计算)
 TFM_TRAINZONE.SpawnDelayMin = 60 -- 生成敌人的最小延迟时间（秒）
 TFM_TRAINZONE.SpawnDelayMax = 240 -- 生成敌人的最大延迟时间（秒）
@@ -303,6 +304,7 @@ function TFM_TRAINZONE:SpawnEnemy()
     local distance_spawn = 8
     local alt_spawn = GetRandomTableElement(self.TableSpawnAlt)
     local type_spawn = GetRandomTableElement(self.TableEnemyTemplate)
+    local pos_group = self.GroupTrain:GetCoordinate()
 
     if self.IsSmartSpawn then
         bra_degree = GetRandomTableElement(self.TableSpawnBRA)
@@ -316,7 +318,7 @@ function TFM_TRAINZONE:SpawnEnemy()
             theta = bra_degree,
             relative_to_unit = true
         })
-        local pos_group = self.GroupTrain:GetCoordinate()
+
         local pos_zone = zoneSpawn:GetCoordinate()
         local heading_spawn = pos_zone:HeadingTo(pos_group)
 
@@ -330,12 +332,12 @@ function TFM_TRAINZONE:SpawnEnemy()
     end
 
     -- delay enemy radar open
-    if self.EnemyEmissionOpenDelay > 0 then
-        self.GroupEnemy:EnableEmission(false)
-        local timer_emssion = TIMER:New(function()
-            self.GroupEnemy:EnableEmission(true)
-        end):Start(self.EnemyEmissionOpenDelay)
-    end
+    -- if self.EnemyEmissionOpenDelay > 0 then
+    --     self.GroupEnemy:EnableEmission(false)
+    --     local timer_emssion = TIMER:New(function()
+    --         self.GroupEnemy:EnableEmission(true)
+    --     end):Start(self.EnemyEmissionOpenDelay)
+    -- end
 
     -- register crash event
     self.GroupEnemy:HandleEvent(EVENTS.Crash, function()
@@ -350,8 +352,18 @@ function TFM_TRAINZONE:SpawnEnemy()
     end)
     --
     -- add task
-    self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
+
+    -- 不管用
+    -- local wp = pos_group:WaypointAirFlyOverPoint(COORDINATE.WaypointAltType.RADIO,1000)
+    -- self.GroupEnemy:SetTaskWaypoint(wp,nil)
+
+    -- 不管用
+    -- self.GroupEnemy:TaskAttackGroup(self.GroupTrain)
     -- self.GroupEnemy:PushTask()
+
+    -- 报TMD错
+    -- local wp = pos_group:WaypointAirFlyOverPoint(COORDINATE.WaypointAltType.RADIO,1000)
+    -- self.GroupEnemy:RouteAirTo(wp,COORDINATE.WaypointAltType.RADIO,COORDINATE.WaypointAction.--TurningPoint,COORDINATE.WaypointType.TurningPoint,1000)
 end
 
 function TFM_TRAINZONE:OnEnterIdle(From, Event, To)
@@ -438,7 +450,11 @@ end
 function TFM_TRAINZONE:OnEventCrash(EventData)
     env.info("==CRASH EVENT==")
     env.info("ini group:" .. EventData.IniGroup.GroupName)
-    env.info("tgt group:" .. EventData.TgtGroup.GroupName)
+    if EventData.TgtGroup then
+        env.info("tgt group:" .. EventData.TgtGroup.GroupName)
+    else
+        env.info("No tgt group")
+    end
     --    if self:Is("ThreatSpawned") then
     --        if self.GroupEnemy then
     --            local group = EventData.TgtGroup
