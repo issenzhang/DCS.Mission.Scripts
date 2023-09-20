@@ -43,11 +43,3 @@ end
 function ZONEBOX_UNIT:IsUnitInBox(Unit)
     return Unit:IsInZone(self) and self:IsAltitudeMatched(Unit:GetAltitude())
 end
-
-function ZONEBOX_UNIT.MakeOffset(Rho, Theta)
-    return {
-        rho = Rho or 0,
-        theta = Theta or 0,
-        relative_to_unit = true
-    }
-end

@@ -47,7 +47,7 @@ function AAR_TRAIN:CheckStatus()
             if self.GroupSetInTrain:IsNotInSet(group) then
                 if self.Ticker <= 0 then
 
-                    -- add group into set
+                    -- add group into set(and remove it for spawn aar again)
                     self.GroupSetInTrain:AddGroup(group)
                     TIMER:New(function()
                        self.GroupSetInTrain:RemoveGroupsByName(group:GetName())

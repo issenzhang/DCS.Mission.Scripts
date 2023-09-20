@@ -161,3 +161,16 @@ function HELPER.MessageToGroup(Group, MessageText, Duration, IsClear, IsSound)
         env.info("HELPER.MessageToGroup: Group is nil")
     end
 end
+
+
+function HELPER.MakeOffset(Rho,Theta)
+    return {rho = Rho or 0,theta=Theta or 0,relative_to_unit=true}
+end
+
+function  HELPER.GetRandomTableElement(table)
+    math.random()
+    math.random()
+    math.random()
+
+    return table[math.random(#table)]
+end
