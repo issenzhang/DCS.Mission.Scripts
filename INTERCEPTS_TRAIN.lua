@@ -78,7 +78,7 @@ function INTERCEPTS_TRAIN_GROUP:New(Group, InterceptTrain)
 
     self:AddTransition("ThreatSpawned", "Success", "Stopped")
 
-    self:AddTransition("*", "KnockItOff", "Stopped")
+    self:AddTransition({"Registered","ThreatSpawned"}, "KnockItOff", "Stopped")
     -- end
 
     self.SpawnTickerTrigger = math.random(self.Train.SpawnDelayMin, self.Train.SpawnDelayMax)
